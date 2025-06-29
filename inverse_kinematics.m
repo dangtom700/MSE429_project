@@ -2,6 +2,59 @@ clc;
 clear;
 close all;
 
+% Test case for validation
+test_theta = [30, 30, 40];
+target = BaseToTool(test_theta(1), test_theta(2), test_theta(3));
+px = target(1,4);
+py = target(2,4);
+pz = target(3,4);
+solutions = inverseKinematics(px, py, pz);
+disp("Inverse kinematics solutions (validation):")
+disp(solutions)
+disp("-----")
+
+if ~isempty(solutions)
+    % Initialize best solution tracking
+    min_error = Inf;
+    best_solution = [];
+    best_position_error = Inf;
+    best_angle_error = Inf;
+    % Evaluate each solution
+    for i = 1:size(solutions,1)
+        % Convert to degrees for comparison
+        sol_deg = rad2deg(solutions(i,:));
+        
+        % Compute forward kinematics for this solution
+        T_solution = BaseToTool(sol_deg(1), sol_deg(2), sol_deg(3));
+        px_sol = T_solution(1,4);
+        py_sol = T_solution(2,4);
+        pz_sol = T_solution(3,4);
+        
+        % Calculate position error (Euclidean distance)
+        position_error = norm([px - px_sol, py - py_sol, pz - pz_sol]);
+        
+        % Calculate joint angle error with wrapping
+        angle_diff = test_theta - sol_deg;
+        angle_diff_wrapped = wrapTo180(angle_diff);
+        angle_error = norm(angle_diff_wrapped);
+        
+        % Track best solution
+        if position_error < min_error
+            min_error = position_error;
+            best_solution = sol_deg;
+            best_position_error = position_error;
+            best_angle_error = angle_error;
+        end
+    end
+
+    min_error
+    best_solution
+    best_angle_error
+    best_position_error
+end
+
+disp("-----")
+
 % Test inverse kinematics by round-trip verification
 count_possible = 0;
 count_iteration = 0;
@@ -70,15 +123,14 @@ for t1 = t1_range
                 % Store errors for analysis
                 position_errors(end+1) = best_position_error;
                 solution_errors(end+1) = best_angle_error;
-                
-                % Display progress
-                if mod(count_possible, 1000) == 0
-                    fprintf('Tested %d valid configurations\n', count_possible);
-                end
+            else
+                fprintf("Failure angle set: %.4f, %.4f, %.4f \n", t1, t2, t3);
+                fprintf("Failure target: %.4f, %.4f, %.4f \n", px_target, py_target, pz_target);
             end
         end
     end
 end
+disp("-----")
 
 % Summary statistics
 fprintf('\nTested %d configurations\n', count_iteration);
