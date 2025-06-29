@@ -90,9 +90,6 @@ for k = 1:length(theta)
     pause(0.01);
 end
 
-close all;
-clc;
-
 %% Load STL file Link2.STL
 stlData = stlread('Link2.STL');  % Structure with Faces and Points
 F = stlData.ConnectivityList;

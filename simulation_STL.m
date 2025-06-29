@@ -48,7 +48,7 @@ trace_pts = struct('L1', [], 'L2', [], 'L3', []);
 iteration = 100;
 theta = [deg2rad(linspace(0,270,iteration));
          deg2rad(linspace(0,135, iteration));
-         deg2rad(linspace(-45,135, iteration))];
+         deg2rad(linspace(-135,45, iteration))];
 
 for k = 1:iteration
     % Joint 1: Base rotation (Z-axis)

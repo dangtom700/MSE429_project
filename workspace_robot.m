@@ -90,7 +90,7 @@ grid on; axis equal;
 angle_ranges = struct(...
     'theta1', 0:5:270, ...    % Joint 1 range
     'theta2', 0:5:135, ...    % Joint 2 range
-    'theta3', -45:5:135);     % Joint 3 range
+    'theta3', -135:5:45);     % Joint 3 range
 
 % Generate workspace
 workspace_points = generateWorkspace(angle_ranges);

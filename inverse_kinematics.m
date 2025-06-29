@@ -11,7 +11,7 @@ solution_errors = [];
 % Joint angle ranges (in degrees)
 t1_range = 0:5:270;    % Shoulder rotation
 t2_range = 0:5:135;    % Upper arm flexion
-t3_range = -45:5:135;  % Forearm flexion
+t3_range = -135:5:45;  % Forearm flexion
 
 fprintf('Testing %d configurations...\n', numel(t1_range)*numel(t2_range)*numel(t3_range));
 
