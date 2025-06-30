@@ -39,11 +39,11 @@ q(3) = patch('Faces', L3.F, 'Vertices', L3.V0', 'FaceColor', link_colors{3}, 'Ed
 
 %% -------------------- ANIMATION --------------------
 trace_pts = struct('L1', [], 'L2', [], 'L3', [], 'Lee', []);
-num_samples = 3;
+num_samples = 100;
 samples = create_samples(num_samples);
-steps = 30;
-current_angle = [0, -180, -90];  % degrees
-r = 20;
+steps = 20;
+current_angle = [0, 0, 90];  % degrees
+r = 5;
 
 for i = 1:num_samples
     sample = samples(i,:);
@@ -59,25 +59,32 @@ for i = 1:num_samples
     fprintf("New location target: %.4f,%.4f,%.4f\n", px_target, py_target, pz_target);
 
     all_solutions = inverseKinematics(px_target, py_target, pz_target);
+    disp("Inverse kinematics solutions:")
+    disp(rad2deg(all_solutions))
     best_solution = [];
     min_coordinate_error = [];
     min_error = Inf;
 
     for j = 1:size(all_solutions, 1)
         sol_deg = rad2deg(all_solutions(j,:));
+    
+        % Filter BEFORE using
+        sol_deg = filter_angle([-130 -90 -90; 130 90 90], sol_deg);
+        if isempty(sol_deg)
+            continue;  % Skip this solution
+        end
+    
         T = BaseToEnd(sol_deg(1), sol_deg(2), sol_deg(3));
         coordinate_error = [px_target, py_target, pz_target] - T(1:3,4)';
         position_error = norm(coordinate_error);
         angle_error = norm(wrapTo180(current_angle - sol_deg));
-
+    
         if position_error < min_error
             min_coordinate_error = coordinate_error;
             min_error = position_error;
             best_solution = sol_deg;
         end
     end
-
-    best_solution = filter_angle([-180 -45 -105; 180 45 105], best_solution);
 
     if isempty(best_solution)
         disp("There is no solution for the new location. Skip to the next available point.")
@@ -135,9 +142,9 @@ for i = 1:num_samples
         plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
         plot3(trace_pts.Lee(:,1), trace_pts.Lee(:,2), trace_pts.Lee(:,3), 'b.', 'MarkerSize', 1);
 
-        draw_frame(joint1, 30);
-        draw_frame(joint2, 30);
-        draw_frame(joint3, 30);
+        %draw_frame(joint1, 30);
+        %draw_frame(joint2, 30);
+        %draw_frame(joint3, 30);
         draw_frame(jointee, 30);
         drawnow;
 
@@ -196,29 +203,38 @@ function filtered_solution = filter_angle(constraints, solution)
         return;
     end
 
-    if any(solution < constraints(1, :) | solution > constraints(2, :))
-        return;
+    for i = 1:3
+        if (solution(i) < constraints(1,i) || solution(i) > constraints(2,i))
+            return
+        end
     end
 
     filtered_solution = solution;
 end
 
 function samples = create_samples(num_samples)
-    r_min = 91;
     r_max = 300;
+    r_min_xy = 50;
 
-    % Uniform sampling in volume
-    u = rand(num_samples, 1); % for radius
-    r = ((u * (r_max^3 - r_min^3)) + r_min^3).^(1/3); % uniform in volume
+    samples = [];
 
-    theta = rand(num_samples, 1) * (pi/2);   % azimuth [0, π/2] → x ≥ 0, y ≥ 0
-    phi   = rand(num_samples, 1) * (pi/2);   % polar angle [0, π/2] → top hemisphere
+    while size(samples, 1) < num_samples
+        % Sample in a cube, filter later
+        x = (2 * rand(num_samples, 1) - 1) * r_max;  % x ∈ [-300, 300]
+        y = (2 * rand(num_samples, 1) - 1) * r_max;  % y ∈ [-300, 300]
+        z = rand(num_samples, 1) * r_max;            % z ∈ [0, 300]
 
-    x = r .* sin(phi) .* cos(theta);
-    y = r .* sin(phi) .* sin(theta);
-    z = r .* cos(phi);
+        r = sqrt(x.^2 + y.^2 + z.^2);
+        % Keep points inside a hemisphere with abs(x), abs(y) ≥ 90
+        valid = (r <= r_max) & (z > 0) & ...
+                (abs(x) >= r_min_xy) & (abs(y) >= r_min_xy);
 
-    samples = [x, y, z];
+        % Append valid samples
+        samples = [samples; [x(valid), y(valid), z(valid)]];
+    end
+
+    % Trim to exact number
+    samples = samples(1:num_samples, :);
 end
 
 function T = BaseToEnd(theta1_deg, theta2_deg, theta3_deg)
