@@ -16,60 +16,49 @@ link_colors  = {[0.6 0.6 0.4], [0.4 0.6 0.8], [0.8 0.4 0.6]};
 frame_colors = {'r', 'g', 'b'};
 
 %% -------------------- JOINT & LINK SETUP --------------------
-% Home positions (relative to base)
 joint1 = [0, 0, 0];
 joint2 = [1.3, 40, 95];
 joint3 = [-132, 12.5, 95.5];
 end_effector = [-258.994, 6.26451, 98.3614];
 
-% Relative translations
 d12 = joint2 - joint1;
-disp(d12)
 d23 = joint3 - joint2;
-disp(d23)
 d3ee = end_effector - joint3;
-disp(d3ee)
 
-% Load STL models and align
 [L1.F, L1.V] = load_link('Link1.STL', [97.9527, 34.4903, 134.099], eye(3));
 [L2.F, L2.V] = load_link('Link2.STL', [157.325, 42.4651, 173.659], [1 0 0; 0 0 -1; 0 1 0]);
 [L3.F, L3.V] = load_link('Link3.STL', [127.04, 113.902, 187.562], [1 0 0; 0 0 -1; 0 1 0]);
 
-% Transpose vertices
 L1.V0 = L1.V';
 L2.V0 = L2.V';
 L3.V0 = L3.V';
 
-% Create patch objects
 q(1) = patch('Faces', L1.F, 'Vertices', L1.V0', 'FaceColor', link_colors{1}, 'EdgeColor', 'none');
 q(2) = patch('Faces', L2.F, 'Vertices', L2.V0', 'FaceColor', link_colors{2}, 'EdgeColor', 'none');
 q(3) = patch('Faces', L3.F, 'Vertices', L3.V0', 'FaceColor', link_colors{3}, 'EdgeColor', 'none');
 
 %% -------------------- ANIMATION --------------------
 trace_pts = struct('L1', [], 'L2', [], 'L3', [], 'Lee', []);
-num_samples = 1;
-samples = create_samples(num_samples);  % You must define this function
+num_samples = 5;
+samples = create_samples(num_samples);
 steps = 10;
-current_angle = [0, -180, -90];  % Degrees
-r = 5;  % Radius of the ball
+current_angle = [0, -180, -90];  % degrees
+r = 20;
 ditance_correction = [0,0,0];
 
 for i = 1:num_samples
     sample = samples(i,:) - ditance_correction;
-    % Define your target for IK (example placeholders)
     px_target = sample(1);
     py_target = sample(2);
     pz_target = sample(3);
 
-    % Draw a sphere at the target position
-    [bx, by, bz] = sphere(20);  % 20x20 sphere resolution
-    sx = r * bx - px_target;
-    sy = r * by - py_target;
+    [bx, by, bz] = sphere(20);
+    sx = r * bx + px_target;
+    sy = r * by + py_target;
     sz = r * bz + pz_target;
 
-    fprintf("New location target: %.4f,%.4f,%.4f\n", -px_target, -py_target, pz_target);
+    fprintf("New location target: %.4f,%.4f,%.4f\n", px_target, py_target, pz_target);
 
-    % Get all inverse kinematics solutions
     all_solutions = inverseKinematics(px_target, py_target, pz_target);
     best_solution = [];
     min_error = Inf;
@@ -91,41 +80,27 @@ for i = 1:num_samples
         disp("--------------------------------------------------------------");
         continue
     end
-    fprintf("Error: %.4f\nTarget angle (rad): %.4f,%.4f,%.4f\n", min_error, best_solution(1), best_solution(2), best_solution(3));
+    fprintf("Error: %.4f\nTarget angle (deg): %.4f,%.4f,%.4f\n", min_error, best_solution(1), best_solution(2), best_solution(3));
 
-    % Plot the target sphere
-    target_ball = surf(sx, sy, sz, ...
-        'FaceColor', 'magenta', 'EdgeColor', 'none', ...
-        'FaceAlpha', 0.3);  % Transparent magenta sphere
-    
-    % Ensure the ball is rendered before motion begins
+    target_ball = surf(sx, sy, sz, 'FaceColor', 'magenta', 'EdgeColor', 'none', 'FaceAlpha', 0.3);
     drawnow;
 
-    % Interpolate motion
-    % Ensure shortest angle path by wrapping delta to [-180, 180]
-    delta_angle = wrapTo180(best_solution - current_angle);  % In degrees
-    
-    % Angular velocity per step
+    delta_angle = wrapTo180(best_solution - current_angle);
     vel = delta_angle / steps;
-    
-    % Preallocate angle trajectory (in radians)
     theta = zeros(3, steps);
-    
-    % Integrate angles step by step
+
     for s = 1:steps
-        step_angle = current_angle + vel * s;  % Step in degrees
-        theta(:,s) = deg2rad(step_angle);      % Convert to radians
+        step_angle = current_angle + vel * s;
+        theta(:,s) = deg2rad(step_angle);
     end
     current_angle = best_solution;
 
     for k = 1:steps
-        % Compute transformations
-        T1 = [rotz(rad2deg(theta(1,k))), [0;0;0]; 0 0 0 1];
-        T2 = [roty(rad2deg(theta(2,k))), d12'; 0 0 0 1];
-        T3 = [roty(rad2deg(theta(3,k))), d23'; 0 0 0 1];
+        T1 = [rotz(theta(1,k)), [0;0;0]; 0 0 0 1];
+        T2 = [roty(theta(2,k)), d12'; 0 0 0 1];
+        T3 = [roty(theta(3,k)), d23'; 0 0 0 1];
         Tee = [[1,0,0;0,1,0;0,0,1], d3ee'; 0 0 0 1];
 
-        % Apply transforms to link vertices
         V1 = apply_transform(L1.V0, T1);
         V2 = apply_transform(L2.V0, T1*T2);
         V3 = apply_transform(L3.V0, T1*T2*T3);
@@ -134,7 +109,6 @@ for i = 1:num_samples
         set(q(2), 'Vertices', V2');
         set(q(3), 'Vertices', V3');
 
-        % Joint positions
         joint1 = T1;
         joint1_pos = T1(1:3,4)';
         joint2 = joint1 * T2;
@@ -149,28 +123,23 @@ for i = 1:num_samples
         trace_pts.L3 = [trace_pts.L3; joint3_pos];
         trace_pts.Lee = [trace_pts.Lee; jointee_pos];
 
-        % Plot trajectories
         plot3(trace_pts.L1(:,1), trace_pts.L1(:,2), trace_pts.L1(:,3), 'r.', 'MarkerSize', 1);
         plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
         plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
         plot3(trace_pts.Lee(:,1), trace_pts.Lee(:,2), trace_pts.Lee(:,3), 'b.', 'MarkerSize', 1);
 
-        % Draw coordinate frames
         draw_frame(joint1, 30);
         draw_frame(joint2, 30);
         draw_frame(joint3, 30);
         draw_frame(jointee, 30);
         drawnow;
-        
-        % Get location of end point
-        degree_angle = rad2deg(theta(:,k))';
-        fprintf("Angle Configuration (rad): %.4f,%.4f,%.4f\n", degree_angle(1), degree_angle(2), degree_angle(3));
-        fprintf("Location (mm): %.4f,%.4f,%.4f\n", jointee_pos(1), jointee_pos(2), jointee_pos(3));
 
-        % Update the distance correction factor
+        degree_angle = rad2deg(theta(:,k))';
+        fprintf("Angle Configuration (deg): %.4f, %.4f, %.4f\n", degree_angle(1), degree_angle(2), degree_angle(3));
+        fprintf("Location (mm): %.4f, %.4f, %.4f\n", jointee_pos(1), jointee_pos(2), jointee_pos(3));
+
         ditance_correction = sample - jointee_pos;
     end
-
     disp("--------------------------------------------------------------");
 end
 
@@ -187,13 +156,13 @@ function V_out = apply_transform(V_in, T)
     V_out = V_out_hom(1:3,:);
 end
 
-function R = rotz(theta)
-    c = cosd(theta); s = sind(theta);
+function R = rotz(theta_rad)
+    c = cos(theta_rad); s = sin(theta_rad);
     R = [c -s 0; s c 0; 0 0 1];
 end
 
-function R = roty(theta)
-    c = cosd(theta); s = sind(theta);
+function R = roty(theta_rad)
+    c = cos(theta_rad); s = sin(theta_rad);
     R = [c 0 s; 0 1 0; -s 0 c];
 end
 
@@ -214,95 +183,77 @@ function angle = wrapTo180(angle)
 end
 
 function samples = create_samples(num_samples)
-    % Define Cartesian bounds
-    x_min = 0; x_max = 305;
-    y_min = 0; y_max = 305;
+    x_min = -305; x_max = 305;
+    y_min = -305; y_max = 305;
     z_min = 0;  z_max = 360;
 
     samples = [];
     while size(samples, 1) < num_samples
-        % Generate candidate points
         x = x_min + (x_max - x_min) * rand(num_samples, 1);
         y = y_min + (y_max - y_min) * rand(num_samples, 1);
         z = z_min + (z_max - z_min) * rand(num_samples, 1);
-
-        % Spherical filtering
         r = sqrt(x.^2 + y.^2 + z.^2);
         valid = (r >= 91.85) & (r <= 368.02);
         samples = [samples; [x(valid), y(valid), z(valid)]];
-
-        % Limit to requested number
         samples = samples(1:min(end,num_samples), :);
     end
 end
 
 function T = BaseToEnd(theta1_deg, theta2_deg, theta3_deg)
-    % Convert degrees to radians
     theta1 = deg2rad(theta1_deg);
     theta2 = deg2rad(theta2_deg);
     theta3 = deg2rad(theta3_deg);
-    
-    % Trigonometric terms
-    a = cos(theta1); b = sin(theta1);  % θ₁ terms
-    c = cos(theta2); d = sin(theta2);  % θ₂ terms
-    f = cos(theta3); g = sin(theta3);  % θ₃ terms
-    
-    % Combined trigonometric expressions
-    cf_df = c*f - d*f;  % cosθ₂cosθ₃ - sinθ₂cosθ₃
-    cg_dg = c*g + d*g;  % cosθ₂sinθ₃ + sinθ₂sinθ₃
-    c_plus_d = c + d;   % cosθ₂ + sinθ₂
-    c_minus_d = c - d;  % cosθ₂ - sinθ₂
-    
-    % Rotation matrix components
+
+    a = cos(theta1); b = sin(theta1);
+    c = cos(theta2); d = sin(theta2);
+    f = cos(theta3); g = sin(theta3);
+
+    cf_df = c*f - d*f;
+    cg_dg = c*g + d*g;
+    c_plus_d = c + d;
+    c_minus_d = c - d;
+
     R = [a*cf_df,  -b,     a*cg_dg;
          b*cf_df,   a,     b*cg_dg;
          -f*c_plus_d, 0,   g*c_minus_d];
-    
-    % Position vector components
+
     Px = a*(1.3 - 133.3*c + 0.5*d - 126.994*cf_df + 2.8614*cg_dg) - 6.26451*b;
     Py = b*(1.3 - 133.3*c + 0.5*d - 126.994*cf_df + 2.8614*cg_dg) + 6.26451*a;
     Pz = 95 + 133.3*d + 0.5*c + 126.994*f*c_plus_d + 2.8614*g*c_minus_d;
-    
-    % Homogeneous transformation matrix
-    T = [R, [Px; Py; Pz]; 
-         [0, 0, 0, 1]];
+
+    T = [R, [Px; Py; Pz]; [0, 0, 0, 1]];
 end
 
 function solutions = inverseKinematics(px, py, pz)
-    % Constants
     constant_y = 6.26451;
     d12x = 1.3; d12z = 95;
     d23x = -133.3; d23z = 0.5;
     d3eex = -126.994; d3eez = 2.8614;
-    
-    % Precompute K0, K1, K2
+
     S = 126.994^2 + 2.8614^2;
     K0 = 133.3^2 + 0.5^2 + S;
     K1 = 2 * (133.3*126.994 + 0.5*2.8614);
     K2 = 2 * (-133.3*2.8614 + 0.5*126.994);
-    
+
     r = sqrt(px^2 + py^2);
     solutions = [];
-    
-    % Check solution existence for θ1
+
     if abs(constant_y) > r
         return; 
     end
-    
-    % Solve for θ1
+
     phi = atan2(px, py);
     gamma = acos(constant_y / r);
     theta1_candidates = [-phi + gamma; -phi - gamma];
-    
+
     for theta1 = theta1_candidates'
         a = cos(theta1);
         b = sin(theta1);
         W = a*px + b*py;
-        M = W - d12x;          % W - 1.3
-        N = pz - d12z;          % Pz - 95
+        M = W - d12x;
+        N = pz - d12z;
         R_val = M^2 + N^2;
-        
-        % Solve for θ3
+
         RHS = R_val - K0;
         normK = sqrt(K1^2 + K2^2);
         if abs(RHS) > normK
@@ -311,21 +262,21 @@ function solutions = inverseKinematics(px, py, pz)
         alpha = atan2(K2, K1);
         beta = acos(RHS / normK);
         theta3_candidates = [alpha + beta; alpha - beta];
-        
+
         for theta3 = theta3_candidates'
             U = cos(theta3);
             V = sin(theta3);
-            A = d23x + d3eex*U + d3eez*V;  % Qx
-            B = d23z - d3eex*V + d3eez*U;  % Qz
+            A = d23x + d3eex*U + d3eez*V;
+            B = d23z - d3eex*V + d3eez*U;
             denom = A^2 + B^2;
-            
+
             if denom < 1e-6
                 continue;
             end
             cos_theta2 = (A*M + B*N) / denom;
             sin_theta2 = (B*M - A*N) / denom;
             theta2 = atan2(sin_theta2, cos_theta2);
-            
+
             solutions = [solutions; theta1, theta2, theta3];
         end
     end
