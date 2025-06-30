@@ -77,7 +77,7 @@ for i = 1:num_samples
         end
     end
 
-    best_solution = filter_angle([-180 -45 -105; 180 45 105], best_solution);
+    best_solution = filter_angle([-180 0 -210; 180 ], best_solution);
 
     if isempty(best_solution)
         disp("There is no solution for the new location. Skip to the next available point.")
@@ -90,8 +90,7 @@ for i = 1:num_samples
 
     target_ball = surf(sx, sy, sz, 'FaceColor', 'magenta', 'EdgeColor', 'none', 'FaceAlpha', 0.3);
     drawnow;
-    
-    % Velocity calculation
+
     delta_angle = wrapTo180(best_solution - current_angle);
     vel = delta_angle / steps;
     theta = zeros(3, steps);
