@@ -98,6 +98,32 @@ workspace_points = generateWorkspace(angle_ranges);
 % Plot workspace
 plotWorkspace(workspace_points);
 
+%% Workspace Range Analysis (Spherical Coordinates)
+
+% Extract workspace positions
+X = workspace_points(:,1);
+Y = workspace_points(:,2);
+Z = workspace_points(:,3);
+
+% Convert to spherical coordinates
+radius = sqrt(X.^2 + Y.^2 + Z.^2);            % r
+azimuth = atan2d(Y, X);                       % θ: angle in X-Y plane
+elevation = atan2d(Z, sqrt(X.^2 + Y.^2));     % φ: angle from X-Y plane
+
+% Calculate min and max for each
+radius_range = [min(radius), max(radius)];
+azimuth_range = [min(azimuth), max(azimuth)];
+elevation_range = [min(elevation), max(elevation)];
+
+% Display results
+fprintf('\n=== Workspace Spherical Range ===\n');
+fprintf('Radius (r):        Min = %.2f mm, Max = %.2f mm\n', radius_range(1), radius_range(2));
+fprintf('Azimuth (θ):       Min = %.2f°, Max = %.2f°\n', azimuth_range(1), azimuth_range(2));
+fprintf('Elevation (φ):     Min = %.2f°, Max = %.2f°\n', elevation_range(1), elevation_range(2));
+fprintf("X-range:           Min = %.2f, Max = %.2f\n", min(X), max(X));
+fprintf("Y-range:           Min = %.2f, Max = %.2f\n", min(Y), max(Y));
+fprintf("Z-range:           Min = %.2f, Max = %.2f\n", min(Z), max(Z));
+
 %% Helper Functions
 function T = dh_transform(theta, d, a, alpha)
     % Standard DH transformation
