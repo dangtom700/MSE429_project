@@ -3,14 +3,15 @@ close all;
 clear;
 
 %% Configuration Parameters
-% DH Parameters [Joint1, Joint2, Joint3, Joint4, Tool]
+% DH Parameters [Joint1, Joint2, Joint3, Tool]
 
 % Link offsets (mm)
-d = [94.961095, -27.329919, 24.190053, 4.483840];
+d = [95.042768, -64.703505, 74.503106, -9.951452];
 % Link lengths (mm)
-r = [1.265289, -133.276306, -85.096658, -41.976690];
+r = [1.343560, -133.301463, -101.773902, -25.218347];
 % Link twists (rad)
-alpha = [-89.999007, 0.029547, 40.435517, 49.591339];
+alpha = [-1.570526, 0.002879, -0.288565, 0.206569];
+disp(alpha)
 
 %% Test Case Validation
 % Test with known angles (30°, 45°, 60°)

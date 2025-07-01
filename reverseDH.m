@@ -16,30 +16,35 @@ transformation is provided
 clc;
 sample_data = rand(50,3) * 360 - 180;  % 50 test cases
 
-% Precompute true transformation matrices
+% Precompute true transformation matrices for all test cases
 true_transforms = cell(size(sample_data,1), 1);
 for i = 1:size(sample_data,1)
-    true_transforms{i} = BaseToTool(sample_data(i,1), sample_data(i,2), sample_data(i,3));
+    angles_deg = sample_data(i,:);
+    true_transforms{i} = BaseToTool(angles_deg(1), angles_deg(2), angles_deg(3));
 end
 
-% Define bounds and PSO parameters
+% Define bounds for the 12 parameters: [d(1:4), a(1:4), alpha(1:4)]
 lb = [-300, -300, -300, -300, -300, -300, -300, -300, -pi, -pi, -pi, -pi];
 ub = [300, 300, 300, 300, 300, 300, 300, 300, pi, pi, pi, pi];
+
+% PSO parameters
 n_particles = 100;
 n_dims = 12;
 max_iter = 10000;
-threshold = 5;  % 5% average error threshold
-display_interval = 1000;
+threshold = 0.1;  % Error threshold for termination
+display_interval = 500;  % Display progress every N iterations
 
-% Initialize particles and best positions
+% Initialize particles and velocities
 X = repmat(lb, n_particles, 1) + rand(n_particles, n_dims) .* (repmat(ub - lb, n_particles, 1));
 V = zeros(n_particles, n_dims);
+
+% Initialize personal best and global best
 pbest = X;
 pbest_val = inf(1, n_particles);
 gbest = zeros(1, n_dims);
 gbest_val = inf;
 
-% Evaluate initial particles
+% Evaluate initial particles using precomputed transforms
 for i = 1:n_particles
     f = objective_function(X(i, :), sample_data, true_transforms);
     pbest_val(i) = f;
@@ -49,31 +54,49 @@ for i = 1:n_particles
     end
 end
 
+% Display initial best error
+fprintf('Iteration 0: Best Error = %f\n', gbest_val);
+
 % PSO constants
-w = 1;
-c1 = 2.5;
-c2 = 1.5;
-v_max = 0.1 * (ub - lb);
+w = 1; % Controls the momentum of the particles
+c1 = 2.5; % Attraction to particle's personal best
+c2 = 1.5; % Attraction to swarm's global best
+
+% Velocity limits
+v_max = 0.05 * (ub - lb);
+
+% Initialize iteration counter
 iter = 0;
 
-% Optimization loop
+% PSO main loop
 while gbest_val > threshold && iter < max_iter
     iter = iter + 1;
+    
     for i = 1:n_particles
-        % Update velocity and position
+        % Update velocity
         r1 = rand();
         r2 = rand();
         V(i, :) = w * V(i, :) + c1 * r1 * (pbest(i, :) - X(i, :)) + c2 * r2 * (gbest - X(i, :));
+        
+        % Clip velocity
         V(i, :) = min(max(V(i, :), -v_max), v_max);
+        
+        % Update position
         X(i, :) = X(i, :) + V(i, :);
+        
+        % Enforce bounds
         X(i, :) = min(max(X(i, :), lb), ub);
         
-        % Evaluate and update best positions
+        % Evaluate using pre-computed transforms
         f = objective_function(X(i, :), sample_data, true_transforms);
+        
+        % Update personal best
         if f < pbest_val(i)
             pbest_val(i) = f;
             pbest(i, :) = X(i, :);
         end
+        
+        % Update global best
         if f < gbest_val
             gbest_val = f;
             gbest = X(i, :);
@@ -82,7 +105,7 @@ while gbest_val > threshold && iter < max_iter
     
     % Display progress
     if mod(iter, display_interval) == 0
-        fprintf('Iteration %d: Avg Error = %.2f%%\n', iter, gbest_val);
+        fprintf('Iteration %d: Best Error = %f\n', iter, gbest_val);
         d_params = gbest(1:4);
         a_params = gbest(5:8);
         alpha_params = gbest(9:12);
@@ -93,22 +116,23 @@ while gbest_val > threshold && iter < max_iter
     end
 end
 
-% Display final results
+% Display termination reason
 if gbest_val <= threshold
     fprintf('\nThreshold reached at iteration %d!', iter);
-    fprintf(' Current error (%.2f%%) <= threshold (%d%%)\n', gbest_val, threshold);
+    fprintf(' Current error (%f) <= threshold (%f)\n', gbest_val, threshold);
 else
-    fprintf('\nMaximum iterations reached (%d). Best error: %.2f%%\n', iter, gbest_val);
+    fprintf('\nMaximum iterations reached (%d). Best error: %f\n', iter, gbest_val);
 end
 
+% Output the best parameters
 fprintf('\nFinal results after %d iterations:\n', iter);
 d_params = gbest(1:4);
 a_params = gbest(5:8);
 alpha_params = gbest(9:12);
 fprintf('d: [%f, %f, %f, %f]\n', d_params);
 fprintf('a: [%f, %f, %f, %f]\n', a_params);
-fprintf('alpha: [%f, %f, %f, %f] deg\n', rad2deg(alpha_params));
-fprintf('Average error per cell: %.2f%%\n', gbest_val);
+fprintf('alpha: [%f, %f, %f, %f] rad\n', alpha_params);
+fprintf('Best error: %f\n', gbest_val);
 
 %% FUNCTIONS
 function T = dh_transform(theta, d, a, alpha)
@@ -133,7 +157,6 @@ function T = BaseToTool(theta1_deg, theta2_deg, theta3_deg)
     t3 = deg2rad(theta3_deg);
     C1 = cos(t1); S1 = sin(t1);
     C2 = cos(t2); S2 = sin(t2);
-    C3 = cos(t3); S3 = sin(t3);
     C23 = cos(t2 + t3);
     S23 = sin(t2 + t3);
     x = C1*(2.8614*S23 - 126.994*C23 - 133.3*C2 + 0.5*S2 + 1.3) - 0.2645*S1;
@@ -145,27 +168,23 @@ function T = BaseToTool(theta1_deg, theta2_deg, theta3_deg)
     T = [R, [x; y; z]; 0, 0, 0, 1];
 end
 
-function avg_error_percent = objective_function(params, test_cases, true_transforms)
+% Modified objective function with pre-computed transforms
+function avg_error = objective_function(params, test_cases, true_transforms)
     d = params(1:4);
     a = params(5:8);
     alpha = params(9:12);
-    total_error_percent = 0;
-    num_test_cases = size(test_cases, 1);
-    total_cells = num_test_cases * 16;  % 16 cells per 4x4 matrix
+    total_error = 0;
+    num_test_case = size(test_cases, 1);
     
-    for i = 1:num_test_cases
+    for i = 1:num_test_case
         angles_deg = test_cases(i, :);
-        T_true = true_transforms{i};
+        T_true = true_transforms{i};  % Use pre-computed true transform
         theta_rad = deg2rad(angles_deg);
-        theta = [theta_rad, 0];
+        theta = [theta_rad, 0];  % 4th joint angle fixed at 0
         T_candidate = dh_transform(theta, d, a, alpha);
-        
-        % Calculate relative error for each cell
-        abs_error = abs(T_true - T_candidate);
-        abs_true = abs(T_true);
-        rel_error = abs_error ./ max(abs_true, 1e-6);  % Avoid division by zero
-        total_error_percent = total_error_percent + sum(100 * rel_error(:), 'omitnan');
+        diff = norm(T_true(1:3,4) - T_candidate(1:3,4));
+        total_error = total_error + diff;
     end
 
-    avg_error_percent = total_error_percent / total_cells;
+    avg_error = total_error / num_test_case;
 end
