@@ -267,3 +267,6 @@ $$
 > - **Analytical derivation** involves partial differentiation of FK equations.
 > - **Singularities** must be handled for smooth trajectory control.
 > - **Numerical methods** (DLS, pseudoinverse) improve robustness.
+
+---
+End of Document
