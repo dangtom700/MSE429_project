@@ -62,11 +62,12 @@ position_errors = [];
 solution_errors = [];
 
 % Joint angle ranges (in degrees)
-t1_range = 0:5:270;    % Shoulder rotation
-t2_range = 0:5:135;    % Upper arm flexion
-t3_range = -135:5:45;  % Forearm flexion
+t1_range = -180:5:180;    % Shoulder rotation
+t2_range = -180:5:180;    % Upper arm flexion
+t3_range = -180:5:180;  % Forearm flexion
+num_samples = numel(t1_range)*numel(t2_range)*numel(t3_range);
 
-fprintf('Testing %d configurations...\n', numel(t1_range)*numel(t2_range)*numel(t3_range));
+fprintf('Testing %d configurations...\n', num_samples);
 
 for t1 = t1_range
     for t2 = t2_range
@@ -123,9 +124,9 @@ for t1 = t1_range
                 % Store errors for analysis
                 position_errors(end+1) = best_position_error;
                 solution_errors(end+1) = best_angle_error;
-            else
-                fprintf("Failure angle set: %.4f, %.4f, %.4f \n", t1, t2, t3);
-                fprintf("Failure target: %.4f, %.4f, %.4f \n", px_target, py_target, pz_target);
+            % else
+            %     fprintf("Failure angle set: %.4f, %.4f, %.4f \n", t1, t2, t3);
+            %     fprintf("Failure target: %.4f, %.4f, %.4f \n", px_target, py_target, pz_target);
             end
         end
     end
@@ -158,109 +159,84 @@ ylabel('Frequency');
 grid on;
 
 function T = BaseToTool(theta1_deg, theta2_deg, theta3_deg)
-    % Convert to radians
     theta1 = deg2rad(theta1_deg);
     theta2 = deg2rad(theta2_deg);
     theta3 = deg2rad(theta3_deg);
-    
-    % Shorthand notation
-    c1 = cos(theta1); s1 = sin(theta1);
-    c2 = cos(theta2); s2 = sin(theta2);
-    c3 = cos(theta3); s3 = sin(theta3);
-    
-    % Combined terms
-    c23 = c2*c3 - s2*s3;
-    s23 = s2*c3 + c2*s3;
-    
-    % Position components
-    px = 40*c1 + 140*c1*c2 + 125*c1*c23 + 0.5*s1;
-    py = 40*s1 + 140*s1*c2 + 125*s1*c23 - 0.5*c1;
-    pz = 125*s23 + 140*s2 + 95;
-    
-    % Rotation matrix
-    T = [c1*c23, -s1, -c1*s23, px;
-         s1*c23,  c1, -s1*s23, py;
-             s23,   0,      c23, pz;
-               0,   0,        0,  1];
+
+    a = cos(theta1); b = sin(theta1);
+    c = cos(theta2); d = sin(theta2);
+    f = cos(theta3); g = sin(theta3);
+
+    cf_df = c*f - d*f;
+    cg_dg = c*g + d*g;
+    c_plus_d = c + d;
+    c_minus_d = c - d;
+
+    R = [a*cf_df,  -b,     a*cg_dg;
+         b*cf_df,   a,     b*cg_dg;
+         -f*c_plus_d, 0,   g*c_minus_d];
+
+    Px = a*(1.3 - 133.3*c + 0.5*d - 126.994*cf_df + 2.8614*cg_dg) - 0.26451*b;
+    Py = b*(1.3 - 133.3*c + 0.5*d - 126.994*cf_df + 2.8614*cg_dg) + 0.26451*a;
+    Pz = 95 + 133.3*d + 0.5*c + 126.994*f*c_plus_d + 2.8614*g*c_minus_d;
+
+    T = [R, [Px; Py; Pz]; [0, 0, 0, 1]];
 end
 
 function solutions = inverseKinematics(px, py, pz)
+    constant_y = 0.26451;
+    d12x = 1.3; d12z = 95;
+    d23x = -133.3; d23z = 0.5;
+    d3eex = -126.994; d3eez = 2.8614;
+
+    S = 126.994^2 + 2.8614^2;
+    K0 = 133.3^2 + 0.5^2 + S;
+    K1 = 2 * (133.3*126.994 + 0.5*2.8614);
+    K2 = 2 * (-133.3*2.8614 + 0.5*126.994);
+
+    r = sqrt(px^2 + py^2);
     solutions = [];
-    denom = px^2 + py^2;
-    
-    % Check if solution for theta1 exists
-    if denom < 0.25
-        return;
+
+    if abs(constant_y) > r
+        return; 
     end
-    
-    % Step 1: Solve for theta1 (two candidates)
-    sqrt_term = sqrt(denom - 0.25);
-    
-    % Candidate 1: Use '+' branch
-    c1_1 = (-0.5*py + px*sqrt_term) / denom;
-    s1_1 = (0.5*px + py*sqrt_term) / denom;
-    theta1_1 = atan2(s1_1, c1_1);
-    
-    % Candidate 2: Use '-' branch
-    c1_2 = (-0.5*py - px*sqrt_term) / denom;
-    s1_2 = (0.5*px - py*sqrt_term) / denom;
-    theta1_2 = atan2(s1_2, c1_2);
-    
-    % Process each theta1 candidate
-    for theta1 = [theta1_1, theta1_2]
-        c1 = cos(theta1);
-        s1 = sin(theta1);
-        
-        % Compute intermediate terms
-        A = c1*px + s1*py;  % Represents 40 + 140*cos(theta2) + 125*cos(theta23)
-        C = pz - 95;        % Represents 140*sin(theta2) + 125*sin(theta23)
-        
-        % Step 2: Solve for theta3
-        numerator = (A - 40)^2 + C^2 - 140^2 - 125^2;
-        denominator = 2 * 140 * 125;
-        cos_theta3 = numerator / denominator;
-        
-        if abs(cos_theta3) > 1
-            continue; % Skip invalid theta3
+
+    phi = atan2(px, py);
+    gamma = acos(constant_y / r);
+    theta1_candidates = [-phi + gamma; -phi - gamma];
+
+    for theta1 = theta1_candidates'
+        a = cos(theta1);
+        b = sin(theta1);
+        W = a*px + b*py;
+        M = W - d12x;
+        N = pz - d12z;
+        R_val = M^2 + N^2;
+
+        RHS = R_val - K0;
+        normK = sqrt(K1^2 + K2^2);
+        if abs(RHS) > normK
+            continue;
         end
-        
-        % Two solutions for theta3 (elbow up/down)
-        theta3_1 = acos(cos_theta3);
-        theta3_2 = -theta3_1;
-        
-        for theta3 = [theta3_1, theta3_2]
-            c3 = cos(theta3);
-            s3 = sin(theta3);
-            
-            % Compute coefficients for theta2 equation
-            P = 140 + 125*c3;
-            Q = 125*s3;
-            denom2 = P^2 + Q^2;
-            
-            if denom2 < 1e-6
-                continue; % Avoid division by zero
+        alpha = atan2(K2, K1);
+        beta = acos(RHS / normK);
+        theta3_candidates = [alpha + beta; alpha - beta];
+
+        for theta3 = theta3_candidates'
+            U = cos(theta3);
+            V = sin(theta3);
+            A = d23x + d3eex*U + d3eez*V;
+            B = d23z - d3eex*V + d3eez*U;
+            denom = A^2 + B^2;
+
+            if denom < 1e-6
+                continue;
             end
-            
-            % Step 3: Solve for theta2
-            cos_theta2 = (P*(A - 40) + Q*C) / denom2;
-            sin_theta2 = (P*C - Q*(A - 40)) / denom2;
-            
-            % Normalize to handle numerical errors
-            norm_val = sqrt(cos_theta2^2 + sin_theta2^2);
-            if norm_val > 0
-                cos_theta2 = cos_theta2 / norm_val;
-                sin_theta2 = sin_theta2 / norm_val;
-            end
-            
+            cos_theta2 = (A*M + B*N) / denom;
+            sin_theta2 = (B*M - A*N) / denom;
             theta2 = atan2(sin_theta2, cos_theta2);
-            
-            % Store valid solution
+
             solutions = [solutions; theta1, theta2, theta3];
         end
     end
-end
-
-function angle = wrapTo180(angle)
-    % Wrap angle to [-180,180] range
-    angle = mod(angle + 180, 360) - 180;
 end

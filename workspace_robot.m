@@ -4,9 +4,9 @@ clear;
 
 %% Configuration Parameters
 % DH Parameters [Joint1, Joint2, Joint3, Joint4, Tool]
-d = [95, 0.5, 0];            % Link offsets (mm)
-r = [40, 140, 125];          % Link lengths (mm)
-alpha = [pi/2, 0, -pi/2];       % Link twists (rad)
+d = [80, 0, 0, 0];            % Link offsets (mm)
+r = [0, 6.78, 133.794, 112.268];          % Link lengths (mm)
+alpha = [0, pi/2, 0, 0];       % Link twists (rad)
 
 %% Test Case Validation
 % Test with known angles (30°, 45°, 60°)
@@ -31,8 +31,8 @@ time_step = 0.001;                      % Time step (s)
 iterations = 100;                       % Number of iterations
 
 % Initialize storage
-location_dh = [];
-location_bt = [];
+location_dh = zeros(iterations, 3);
+location_bt = zeros(iterations, 3);
 differences = zeros(iterations, 1);
 
 % Initial joint angles (degrees)
@@ -50,8 +50,8 @@ for i = 1:iterations
     T_bt_current = BaseToTool(current_angles_deg(1), current_angles_deg(2), current_angles_deg(3));
     
     % Store positions
-    location_dh = [location_dh; T_dh_current(1:3, 4)'];
-    location_bt = [location_bt; T_bt_current(1:3, 4)'];
+    location_dh(i,:) = T_dh_current(1:3,4)';
+    location_bt(i,:) = T_bt_current(1:3,4)';
     
     % Calculate difference
     differences(i) = norm(T_dh_current(1:3, 4) - T_bt_current(1:3, 4));
@@ -87,13 +87,13 @@ grid on; axis equal;
 
 %% Workspace Analysis
 % Define angle ranges (degrees)
-angle_ranges = struct(...
-    'theta1', 0:5:270, ...    % Joint 1 range
-    'theta2', 0:5:135, ...    % Joint 2 range
-    'theta3', -135:5:45);     % Joint 3 range
+t1_range = -100:5:100;    % Shoulder rotation
+t2_range = -90:5:90;    % Upper arm flexion
+t3_range = -90:5:90;  % Forearm flexion
+num_samples = numel(t1_range)*numel(t2_range)*numel(t3_range);
 
 % Generate workspace
-workspace_points = generateWorkspace(angle_ranges);
+workspace_points = generateWorkspace(t1_range,t2_range, t3_range, num_samples);
 
 % Plot workspace
 plotWorkspace(workspace_points);
@@ -147,44 +147,40 @@ function T = dh_transform(theta, d, a, alpha)
 end
 
 function T = BaseToTool(theta1_deg, theta2_deg, theta3_deg)
-    % Closed-form forward kinematics solution
-    % Inputs in degrees (converted internally)
-    
-    % Convert to radians
     theta1 = deg2rad(theta1_deg);
     theta2 = deg2rad(theta2_deg);
     theta3 = deg2rad(theta3_deg);
-    
-    % Shorthand notation
-    c1 = cos(theta1); s1 = sin(theta1);
-    c2 = cos(theta2); s2 = sin(theta2);
-    c3 = cos(theta3); s3 = sin(theta3);
-    
-    % Combined terms
-    c23 = c2*c3 - s2*s3;
-    s23 = s2*c3 + c2*s3;
-    
-    % Position components
-    px = 40*c1 + 140*c1*c2 + 125*c1*c23 + 0.5*s1;
-    py = 40*s1 + 140*s1*c2 + 125*s1*c23 - 0.5*c1;
-    pz = 125*s23 + 140*s2 + 95;
-    
-    % Rotation matrix
-    T = [c1*c23, -s1, -c1*s23, px;
-         s1*c23, c1, -s1*s23, py;
-            s23,     0,      c23, pz;
-              0,      0,        0,  1];
+
+    a = cos(theta1); b = sin(theta1);
+    c = cos(theta2); d = sin(theta2);
+    f = cos(theta3); g = sin(theta3);
+
+    cf_df = c*f - d*f;
+    cg_dg = c*g + d*g;
+    c_plus_d = c + d;
+    c_minus_d = c - d;
+
+    R = [a*cf_df,  -b,     a*cg_dg;
+         b*cf_df,   a,     b*cg_dg;
+         -f*c_plus_d, 0,   g*c_minus_d];
+
+    Px = a*(1.3 - 133.3*c + 0.5*d - 126.994*cf_df + 2.8614*cg_dg) - 0.26451*b;
+    Py = b*(1.3 - 133.3*c + 0.5*d - 126.994*cf_df + 2.8614*cg_dg) + 0.26451*a;
+    Pz = 95 + 133.3*d + 0.5*c + 126.994*f*c_plus_d + 2.8614*g*c_minus_d;
+
+    T = [R, [Px; Py; Pz]; [0, 0, 0, 1]];
 end
 
-function workspace = generateWorkspace(angles)
+function workspace = generateWorkspace(angle1, angle2, angle3, num_samples)
     % Generate workspace points
-    workspace = [];
-    
-    for t1 = angles.theta1
-        for t2 = angles.theta2
-            for t3 = angles.theta3
+    workspace = zeros(num_samples, 3);
+    index = 0;
+    for t1 = angle1
+        for t2 = angle2
+            for t3 = angle3
+                index = index + 1;
                 T = BaseToTool(t1, t2, t3);
-                workspace(end+1, :) = T(1:3, 4)';
+                workspace(index, :) = T(1:3, 4)';
             end
         end
     end
