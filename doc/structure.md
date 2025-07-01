@@ -1,4 +1,4 @@
-# Overview of the current state
+# File structure
 
 ## Structure
 All MATLAB files (.m files) are standalone files. They do not rely on each other to function as a working program. There are 3 types of files to look for in this folder
@@ -16,3 +16,4 @@ All MATLAB files (.m files) are standalone files. They do not rely on each other
 - simulation_STL: This file includes forward kinematics of a fully assembled robot arm. There are 3 angular that are free to control for simulation. The simulation also draws the coordinate system are the component moves in space. The simulation gives information about the path it travels and the behavior of the relative coordinate systems work over time.
 - trajectory_robot: This file contain a simplified model to the simulation the path it creates over time as it forward kinematics, utilizing a complete base to end-effector transformation matrix from the workspace_robot.m file.
 - workspace_robot: This file contains the algorithm of direct DH transformation and a full transformation matrix from base to end-effector based on the parameters provided within this file. There is also a graphical illustration of the error between in the direct DH transformation and a full matrix transformation from base to end-effector given the DH configurations of this file. The angles in this file has limited angle range, which is iterate and permutate to create a clear workspace or a clear vision of where the end-effector is likely to be located in 3D space, in additions to the 3 side projection of the view.
+- planning_path: This file interpret the orientation and position of every component and end effector to reach a desired point using analytical inverse kinematics and Jacobian joint-space trajectory separately.
