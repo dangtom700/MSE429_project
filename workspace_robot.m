@@ -4,9 +4,13 @@ clear;
 
 %% Configuration Parameters
 % DH Parameters [Joint1, Joint2, Joint3, Joint4, Tool]
-d = [80, 0, 0, 0];            % Link offsets (mm)
-r = [0, 6.78, 133.794, 112.268];          % Link lengths (mm)
-alpha = [0, pi/2, 0, 0];       % Link twists (rad)
+
+% Link offsets (mm)
+d = [94.961095, -27.329919, 24.190053, 4.483840];
+% Link lengths (mm)
+r = [1.265289, -133.276306, -85.096658, -41.976690];
+% Link twists (rad)
+alpha = [-89.999007, 0.029547, 40.435517, 49.591339];
 
 %% Test Case Validation
 % Test with known angles (30°, 45°, 60°)
@@ -147,28 +151,32 @@ function T = dh_transform(theta, d, a, alpha)
 end
 
 function T = BaseToTool(theta1_deg, theta2_deg, theta3_deg)
-    theta1 = deg2rad(theta1_deg);
-    theta2 = deg2rad(theta2_deg);
-    theta3 = deg2rad(theta3_deg);
+    % Convert degrees to radians
+    t1 = deg2rad(theta1_deg);
+    t2 = deg2rad(theta2_deg);
+    t3 = deg2rad(theta3_deg);
+    
+    % Precompute sines and cosines
+    C1 = cos(t1); S1 = sin(t1);
+    C2 = cos(t2); S2 = sin(t2);
+    C3 = cos(t3); S3 = sin(t3);
+    
+    C23 = cos(t2 + t3);
+    S23 = sin(t2 + t3);
+    
+    % Position equations (from ^0_{ee}T)
+    x = C1*(2.8614*S23 - 126.994*C23 - 133.3*C2 + 0.5*S2 + 1.3) - 0.2645*S1;
+    y = S1*(2.8614*S23 - 126.994*C23 - 133.3*C2 + 0.5*S2 + 1.3) + 0.2645*C1;
+    z = 126.994*S23 + 2.8614*C23 + 0.5*C2 + 133.3*S2 + 95;
+    
+    % Rotation matrix (simplified from ^0_{ee}T)
+    R = [C1*C23, -S1, C1*S23;
+         S1*C23,  C1, S1*S23;
+         -S23,     0, C23];
 
-    a = cos(theta1); b = sin(theta1);
-    c = cos(theta2); d = sin(theta2);
-    f = cos(theta3); g = sin(theta3);
-
-    cf_df = c*f - d*f;
-    cg_dg = c*g + d*g;
-    c_plus_d = c + d;
-    c_minus_d = c - d;
-
-    R = [a*cf_df,  -b,     a*cg_dg;
-         b*cf_df,   a,     b*cg_dg;
-         -f*c_plus_d, 0,   g*c_minus_d];
-
-    Px = a*(1.3 - 133.3*c + 0.5*d - 126.994*cf_df + 2.8614*cg_dg) - 0.26451*b;
-    Py = b*(1.3 - 133.3*c + 0.5*d - 126.994*cf_df + 2.8614*cg_dg) + 0.26451*a;
-    Pz = 95 + 133.3*d + 0.5*c + 126.994*f*c_plus_d + 2.8614*g*c_minus_d;
-
-    T = [R, [Px; Py; Pz]; [0, 0, 0, 1]];
+    % Assemble homogeneous transformation matrix
+    T = [R, [x; y; z];
+         0, 0, 0, 1];
 end
 
 function workspace = generateWorkspace(angle1, angle2, angle3, num_samples)

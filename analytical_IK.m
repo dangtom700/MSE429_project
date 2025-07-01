@@ -6,6 +6,7 @@ axis equal; axis vis3d; grid on; hold on;
 xlabel('X'); ylabel('Y'); zlabel('Z');
 view(3); rotate3d on;
 axis([-300 300 -300 300 -200 350]);
+title("Path Planning Using Analytical Inverse Kinematics")
 
 % Lighting setup
 light('Position', [0, 0, 2], 'Style', 'infinite');
@@ -39,7 +40,7 @@ q(3) = patch('Faces', L3.F, 'Vertices', L3.V0', 'FaceColor', link_colors{3}, 'Ed
 
 %% -------------------- ANIMATION --------------------
 trace_pts = struct('L1', [], 'L2', [], 'L3', [], 'Lee', []);
-num_samples = 1000;
+num_samples = 10;
 samples = create_samples(num_samples);
 steps = 20;
 current_angle = [0, 0, 90];  % degrees
@@ -139,15 +140,15 @@ for i = 1:num_samples
         trace_pts.L3 = [trace_pts.L3; joint3_pos];
         trace_pts.Lee = [trace_pts.Lee; jointee_pos];
 
-        %plot3(trace_pts.L1(:,1), trace_pts.L1(:,2), trace_pts.L1(:,3), 'r.', 'MarkerSize', 1);
-        %plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
-        %plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
-        %plot3(trace_pts.Lee(:,1), trace_pts.Lee(:,2), trace_pts.Lee(:,3), 'b.', 'MarkerSize', 1);
+        plot3(trace_pts.L1(:,1), trace_pts.L1(:,2), trace_pts.L1(:,3), 'r.', 'MarkerSize', 1);
+        plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
+        plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
+        plot3(trace_pts.Lee(:,1), trace_pts.Lee(:,2), trace_pts.Lee(:,3), 'b.', 'MarkerSize', 1);
 
-        %draw_frame(joint1, 30);
-        %draw_frame(joint2, 30);
-        %draw_frame(joint3, 30);
-        %draw_frame(jointee, 30);
+        draw_frame(joint1, 30);
+        draw_frame(joint2, 30);
+        draw_frame(joint3, 30);
+        draw_frame(jointee, 30);
         drawnow;
 
         degree_angle = rad2deg(theta(:,k))';
@@ -248,7 +249,6 @@ function T = BaseToTool(theta1_deg, theta2_deg, theta3_deg)
     % Precompute sines and cosines
     C1 = cos(t1); S1 = sin(t1);
     C2 = cos(t2); S2 = sin(t2);
-    C3 = cos(t3); S3 = sin(t3);
     
     C23 = cos(t2 + t3);
     S23 = sin(t2 + t3);
@@ -315,28 +315,4 @@ function solutions = inverseKinematics(px, py, pz)
     end
 
     solutions = deg2rad(solutions);
-end
-
-function distance_gain = Jacobian(theta1_deg, theta2_deg, theta3_deg)
-    t1 = deg2rad(theta1_deg);
-    t2 = deg2rad(theta2_deg);
-    t3 = deg2rad(theta3_deg);
-    
-    C1 = cos(t1); S1 = sin(t1);
-    C2 = cos(t2); S2 = sin(t2);
-    C23 = cos(t2 + t3); S23 = sin(t2 + t3);
-    
-    % Compute components
-    A = 2.8614*S23 - 126.994*C23 - 133.3*C2 + 0.5*S2 + 1.3;
-    B = 2.8614*C23 + 126.994*S23 + 133.3*S2 + 0.5*C2;
-    D = 2.8614*C23 + 126.994*S23;
-    E = 126.994*C23 - 2.8614*S23 - 0.5*S2 + 133.3*C2;
-    F = 126.994*C23 - 2.8614*S23;
-    
-    % Jacobian matrix
-    J = [ -S1*A - 0.2645*C1,  C1*B, C1*D;
-           C1*A - 0.2645*S1,  S1*B, S1*D;
-           0,                E,    F ];
-       
-    distance_gain = J;
 end
