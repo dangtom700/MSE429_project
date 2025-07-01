@@ -47,10 +47,10 @@ if ~isempty(solutions)
         end
     end
 
-    min_error
-    best_solution
-    best_angle_error
-    best_position_error
+    fprintf("Minimum error: %.4f\n",min_error);
+    fprintf("Minimum angle error: %.4f\n",best_angle_error);
+    fprintf("Minimum position error: %.4f\n",best_position_error);
+    fprintf("Best angle solutions: %.4f, %.4f, %.4f\n", best_solution);
 end
 
 disp("-----")
@@ -58,14 +58,14 @@ disp("-----")
 % Test inverse kinematics by round-trip verification
 count_possible = 0;
 count_iteration = 0;
-position_errors = [];
-solution_errors = [];
 
 % Joint angle ranges (in degrees)
 t1_range = -180:5:180;    % Shoulder rotation
 t2_range = -180:5:180;    % Upper arm flexion
 t3_range = -180:5:180;  % Forearm flexion
 num_samples = numel(t1_range)*numel(t2_range)*numel(t3_range);
+position_error = zeros(1,num_samples);
+solution_errors = zeros(1,num_samples);
 
 fprintf('Testing %d configurations...\n', num_samples);
 
@@ -122,8 +122,8 @@ for t1 = t1_range
                 end
                 
                 % Store errors for analysis
-                position_errors(end+1) = best_position_error;
-                solution_errors(end+1) = best_angle_error;
+                position_errors(count_iteration) = best_position_error;
+                solution_errors(count_iteration) = best_angle_error;
             % else
             %     fprintf("Failure angle set: %.4f, %.4f, %.4f \n", t1, t2, t3);
             %     fprintf("Failure target: %.4f, %.4f, %.4f \n", px_target, py_target, pz_target);
@@ -167,7 +167,6 @@ function T = BaseToTool(theta1_deg, theta2_deg, theta3_deg)
     % Precompute sines and cosines
     C1 = cos(t1); S1 = sin(t1);
     C2 = cos(t2); S2 = sin(t2);
-    C3 = cos(t3); S3 = sin(t3);
     
     C23 = cos(t2 + t3);
     S23 = sin(t2 + t3);
@@ -232,4 +231,6 @@ function solutions = inverseKinematics(px, py, pz)
                          rad2deg(t1), rad2deg(t2), rad2deg(t3)];
         end
     end
+
+    solutions = deg2rad(solutions);
 end
