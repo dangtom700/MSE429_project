@@ -19,6 +19,9 @@ C_2 & 0 & S_2 & 1.3 \\
 0 & 0 & 0 & 1 \\
 \end{bmatrix}
 $$
+
+---
+
 $$
 ^0_2T = \begin{bmatrix}
 C_1C_2 & -S_1 & C_1S_2 & 1.3C_1-40S_1 \\
@@ -36,6 +39,9 @@ C_3 & 0 & S_3 & -133.3 \\
 0 & 0 & 0 & 1 \\
 \end{bmatrix}
 $$
+
+---
+
 $$
 ^0_3T = \begin{bmatrix}
 C_1C_{23} & -S_1 & C_1S_{23} & -133.3C_1C_2+0.5C_1S_2+1.3C_1-12.5S_1 \\
@@ -53,6 +59,10 @@ $$
 0 & 0 & 0 & 1 \\
 \end{bmatrix}
 $$
+
+---
+
+> **Solutions**:  
 > $$
 > ^0_{ee}T = \begin{bmatrix}
 > C_1C_{23} & -S_1 & C_1S_{23} & 2.8614C_1S_{23}-126.994C_1C_{23}-133.3C_1C_2+0.5C_1S_2+1.3C_1-0.2645S_1 \\
@@ -126,12 +136,14 @@ $$
 > *(1 solution per $(\theta_1, \theta_2)$ pair)*
 
 ---
+> **Note**:  
 > Solution Count
 > - $\theta_1$: Up to 2 solutions
 > - $\theta_2$: Up to 2 solutions per $\theta_1$
 > - $\theta_3$: 1 solution per $(\theta_1, \theta_2)$  
 > **Total**: Up to 4 inverse kinematics solutions for a given $(x, y, z)$.
 ---
+> **Note**:  
 > 1. **Verification**: Always plug solutions back into forward kinematics to verify.
 > 2. **Singularities**: 
 >    - If $x^2 + y^2 < 0.2645^2$, $\theta_1$ is undefined.
@@ -263,6 +275,7 @@ $$
   $$
   where $\lambda$ is a damping factor.
 
+> **Note**:  
 > - The **Jacobian** maps joint velocities to end-effector velocities.
 > - **Analytical derivation** involves partial differentiation of FK equations.
 > - **Singularities** must be handled for smooth trajectory control.
