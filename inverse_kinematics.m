@@ -159,84 +159,77 @@ ylabel('Frequency');
 grid on;
 
 function T = BaseToTool(theta1_deg, theta2_deg, theta3_deg)
-    theta1 = deg2rad(theta1_deg);
-    theta2 = deg2rad(theta2_deg);
-    theta3 = deg2rad(theta3_deg);
+    % Convert degrees to radians
+    t1 = deg2rad(theta1_deg);
+    t2 = deg2rad(theta2_deg);
+    t3 = deg2rad(theta3_deg);
+    
+    % Precompute sines and cosines
+    C1 = cos(t1); S1 = sin(t1);
+    C2 = cos(t2); S2 = sin(t2);
+    C3 = cos(t3); S3 = sin(t3);
+    
+    C23 = cos(t2 + t3);
+    S23 = sin(t2 + t3);
+    
+    % Position equations (from ^0_{ee}T)
+    x = C1*(2.8614*S23 - 126.994*C23 - 133.3*C2 + 0.5*S2 + 1.3) - 0.2645*S1;
+    y = S1*(2.8614*S23 - 126.994*C23 - 133.3*C2 + 0.5*S2 + 1.3) + 0.2645*C1;
+    z = 126.994*S23 + 2.8614*C23 + 0.5*C2 + 133.3*S2 + 95;
+    
+    % Rotation matrix (simplified from ^0_{ee}T)
+    R = [C1*C23, -S1, C1*S23;
+         S1*C23,  C1, S1*S23;
+         -S23,     0, C23];
 
-    a = cos(theta1); b = sin(theta1);
-    c = cos(theta2); d = sin(theta2);
-    f = cos(theta3); g = sin(theta3);
-
-    cf_df = c*f - d*f;
-    cg_dg = c*g + d*g;
-    c_plus_d = c + d;
-    c_minus_d = c - d;
-
-    R = [a*cf_df,  -b,     a*cg_dg;
-         b*cf_df,   a,     b*cg_dg;
-         -f*c_plus_d, 0,   g*c_minus_d];
-
-    Px = a*(1.3 - 133.3*c + 0.5*d - 126.994*cf_df + 2.8614*cg_dg) - 0.26451*b;
-    Py = b*(1.3 - 133.3*c + 0.5*d - 126.994*cf_df + 2.8614*cg_dg) + 0.26451*a;
-    Pz = 95 + 133.3*d + 0.5*c + 126.994*f*c_plus_d + 2.8614*g*c_minus_d;
-
-    T = [R, [Px; Py; Pz]; [0, 0, 0, 1]];
+    % Assemble homogeneous transformation matrix
+    T = [R, [x; y; z];
+         0, 0, 0, 1];
 end
 
 function solutions = inverseKinematics(px, py, pz)
-    constant_y = 0.26451;
-    d12x = 1.3; d12z = 95;
-    d23x = -133.3; d23z = 0.5;
-    d3eex = -126.994; d3eez = 2.8614;
+    R = 2.8614^2 + 126.994^2;
+    C = 133.3^2 + 0.5^2;
 
-    S = 126.994^2 + 2.8614^2;
-    K0 = 133.3^2 + 0.5^2 + S;
-    K1 = 2 * (133.3*126.994 + 0.5*2.8614);
-    K2 = 2 * (-133.3*2.8614 + 0.5*126.994);
-
-    r = sqrt(px^2 + py^2);
     solutions = [];
-
-    if abs(constant_y) > r
-        return; 
+    
+    r_squared = px^2 + py^2;
+    if r_squared < 0.2645^2
+        return;  % No valid theta1
     end
+    
+    alpha = atan2(px, -py);
+    beta = acos(-0.2645 / sqrt(r_squared));
+    theta1_candidates = [alpha + beta, alpha - beta];
 
-    phi = atan2(px, py);
-    gamma = acos(constant_y / r);
-    theta1_candidates = [-phi + gamma; -phi - gamma];
+    for t1 = theta1_candidates
+        c1 = cos(t1); s1 = sin(t1);
+        U = c1*px + s1*py - 1.3;
+        V = pz - 95;
+        M = 133.3*U - 0.5*V;
+        N = -0.5*U - 133.3*V;
+        L = 0.5 * (R - C - U^2 - V^2);
 
-    for theta1 = theta1_candidates'
-        a = cos(theta1);
-        b = sin(theta1);
-        W = a*px + b*py;
-        M = W - d12x;
-        N = pz - d12z;
-        R_val = M^2 + N^2;
-
-        RHS = R_val - K0;
-        normK = sqrt(K1^2 + K2^2);
-        if abs(RHS) > normK
-            continue;
+        if M^2 + N^2 < L^2
+            continue;  % No real solution for theta2
         end
-        alpha = atan2(K2, K1);
-        beta = acos(RHS / normK);
-        theta3_candidates = [alpha + beta; alpha - beta];
+        
+        alpha2 = atan2(N, M);
+        beta2 = acos(L / sqrt(M^2 + N^2));
+        theta2_candidates = [alpha2 + beta2, alpha2 - beta2];
 
-        for theta3 = theta3_candidates'
-            U = cos(theta3);
-            V = sin(theta3);
-            A = d23x + d3eex*U + d3eez*V;
-            B = d23z - d3eex*V + d3eez*U;
-            denom = A^2 + B^2;
+        for t2 = theta2_candidates
+            c2 = cos(t2); s2 = sin(t2);
+            P = U + 133.3*c2 - 0.5*s2;
+            Q = V - 0.5*c2 - 133.3*s2;
 
-            if denom < 1e-6
-                continue;
-            end
-            cos_theta2 = (A*M + B*N) / denom;
-            sin_theta2 = (B*M - A*N) / denom;
-            theta2 = atan2(sin_theta2, cos_theta2);
+            s23 = (2.8614*P + 126.994*Q) / R;
+            c23 = (-126.994*P + 2.8614*Q) / R;
+            t3 = atan2(s23, c23) - t2;
 
-            solutions = [solutions; theta1, theta2, theta3];
+            % Convert to degrees for output
+            solutions = [solutions;
+                         rad2deg(t1), rad2deg(t2), rad2deg(t3)];
         end
     end
 end
