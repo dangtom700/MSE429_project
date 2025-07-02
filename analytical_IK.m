@@ -45,7 +45,7 @@ samples = create_samples(num_samples);
 steps = 20;
 current_angle = [0, 0, 90];  % degrees
 r = 5;
-angle_constaints = [-180 -80 -90; 180 80 90];
+angle_constaints = [-100 -80 -90; 100 80 90];
 constraints = deg2rad(angle_constaints);
 
 for i = 1:num_samples
