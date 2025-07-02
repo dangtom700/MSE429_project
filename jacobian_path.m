@@ -42,88 +42,95 @@ q(3) = patch('Faces', L3.F, 'Vertices', L3.V0', 'FaceColor', link_colors{3}, 'Ed
 trace_pts = struct('L1', [], 'L2', [], 'L3', [], 'Lee', []);
 num_samples = 100;
 samples = create_samples(num_samples);
-steps = 20;
-current_angle = [0, 0, 90];  % degrees
-r = 5;
-angle_constaints = [-100 -80 -90; 100 80 90];
-constraints = deg2rad(angle_constaints);
+current_angle = [0, 0, 90];  % Initial joint angles [deg]
+r = 5;  % Target sphere radius
+
+% Motion control parameters
+velocity = 20;       % End-effector speed [mm/s]
+dt = 0.1;            % Time step [s]
+tolerance = 5;       % Position tolerance [mm]
+max_joint_vel = 30;  % Maximum joint velocity [deg/s]
+lambda = 0.1;        % Damping factor for singularity handling
+max_steps = 100;     % Maximum steps per target
+singularity_threshold = 1e5;  % Condition number threshold for singularity
+reachability = 250;  % Maximum radius
 
 for i = 1:num_samples
-    sample = samples(i,:);
-    px_target = sample(1);
-    py_target = sample(2);
-    pz_target = sample(3);
-
-    [bx, by, bz] = sphere(20);
-    sx = r * bx + px_target;
-    sy = r * by + py_target;
-    sz = r * bz + pz_target;
-
-    fprintf("New location target: %.4f,%.4f,%.4f\n", px_target, py_target, pz_target);
-
-    all_solutions = inverseKinematics(px_target, py_target, pz_target);
-    disp("Inverse kinematics solutions:")
-    disp(rad2deg(all_solutions))
-    best_solution = [];
-    min_coordinate_error = [];
-    min_error = Inf;
-
-    for j = 1:size(all_solutions, 1)
-        sol_deg = rad2deg(all_solutions(j,:));
-    
-        % Filter BEFORE using
-        sol_deg = filter_angle(angle_constaints, sol_deg);
-        if isempty(sol_deg)
-            continue;  % Skip this solution
-        end
-    
-        T = BaseToTool(sol_deg(1), sol_deg(2), sol_deg(3));
-        coordinate_error = [px_target, py_target, pz_target] - T(1:3,4)';
-        position_error = norm(coordinate_error);
-        angle_error = norm(wrapTo180(current_angle - sol_deg));
-    
-        if position_error < min_error
-            min_coordinate_error = coordinate_error;
-            min_error = position_error;
-            best_solution = sol_deg;
-        end
-    end
-
-    if isempty(best_solution)
-        disp("There is no solution for the new location. Skip to the next available point.")
-        disp("--------------------------------------------------------------");
+    % Get current target position
+    target_pos = samples(i,:);
+    if norm(target_pos) > reachability
+        fprintf("Out of Reach: %.4f, %.4f, %.4f\n", target_pos);
+        disp("--------------------------------------------------------------")
         continue
     end
-    fprintf("Distance error: %.4f\n", min_error);
-    fprintf("Target angle (deg): %.4f,%.4f,%.4f\n", best_solution(1), best_solution(2), best_solution(3));
-    fprintf("Coordinate error (mm): %.4f,%.4f,%.4f\n", min_coordinate_error(1), min_coordinate_error(2), min_coordinate_error(3));
 
-    target_ball = surf(sx, sy, sz, 'FaceColor', 'magenta', 'EdgeColor', 'none', 'FaceAlpha', 0.3);
-    drawnow;
+    px_target = target_pos(1);
+    py_target = target_pos(2);
+    pz_target = target_pos(3);
+
+    fprintf("New target: %.2f, %.2f, %.2f mm\n", px_target, py_target, pz_target);
     
-    % Velocity calculation
-    delta_angle = wrapTo180(best_solution - current_angle);
-    vel = delta_angle / steps;
-    theta = zeros(3, steps);
+    % Create target visualization
+    [bx, by, bz] = sphere(20);
+    target_sphere = surf(r*bx + target_pos(1), ...
+                      r*by + target_pos(2), ...
+                      r*bz + target_pos(3), ...
+                      'FaceColor', 'magenta', 'EdgeColor', 'none', 'FaceAlpha', 0.3);
+    drawnow;
+    error_norm = tolerance;
+    step = 0;
+    singularity_detected = false;
+    
+    % Motion control loop
+    while error_norm >= tolerance
+        step = step + 1;
 
-    for s = 1:steps
-        step_angle = current_angle + vel * s;
-        theta(:,s) = deg2rad(step_angle);
-    end
-    current_angle = best_solution;
-
-    for k = 1:steps
-        q_rad = theta(:,k);
-        q_deg = rad2deg(q_rad);
-        Jk = Jacobian(q_deg(1), q_deg(2), q_deg(3));
+        % Compute current end-effector position
+        T_current = BaseToTool(current_angle(1), current_angle(2), current_angle(3));
+        current_pos = T_current(1:3,4)';
+        
+        % Compute position error
+        pos_error = target_pos - current_pos;
+        error_norm = norm(pos_error);
+        
+        % Compute desired end-effector velocity
+        direction = pos_error / error_norm;
+        xd_dot = direction * velocity;  % Constant velocity vector
+        
+        % Compute Jacobian at current configuration
+        Jk = Jacobian(current_angle(1), current_angle(2), current_angle(3));
         condJ = cond(Jk);
-        fprintf("Step %d: cond(J) = %.2f\n", k, condJ);
+        
+        % Check for singularity
+        if condJ > singularity_threshold
+            fprintf("Step %d: Singularity detected (cond=%.2e). Skipping target.\n", step, condJ);
+            singularity_detected = true;
+            break;
+        end
+        
+        fprintf("Step %d: cond(J) = %.2f, Error: %.2f mm\n", step, condJ, error_norm);
+        
+        % Compute joint velocities using damped least squares
+        J_pinv = Jk' / (Jk*Jk' + lambda^2*eye(3));
+        theta_dot_rad = J_pinv * xd_dot';
+        
+        % Convert to deg/s and clamp velocities
+        theta_dot_deg = rad2deg(theta_dot_rad)';
+        theta_dot_deg = sign(theta_dot_deg) .* min(abs(theta_dot_deg), max_joint_vel);
+        
+        % Update joint angles
+        current_angle = current_angle + theta_dot_deg * dt;
+        
+        % Update visualization
+        theta_rad = deg2rad(current_angle);
+        
+        % Compute transforms
+        T1 = [rotz(theta_rad(1)), [0;0;0]; 0 0 0 1];
+        T2 = [roty(theta_rad(2)), d12'; 0 0 0 1];
+        T3 = [roty(theta_rad(3)), d23'; 0 0 0 1];
+        Tee = [eye(3), d3ee'; 0 0 0 1];
 
-        T1 = [rotz(theta(1,k)), [0;0;0]; 0 0 0 1];
-        T2 = [roty(theta(2,k)), d12'; 0 0 0 1];
-        T3 = [roty(theta(3,k)), d23'; 0 0 0 1];
-        Tee = [[1,0,0;0,1,0;0,0,1], d3ee'; 0 0 0 1];
-
+        % Transform link vertices
         V1 = apply_transform(L1.V0, T1);
         V2 = apply_transform(L2.V0, T1*T2);
         V3 = apply_transform(L3.V0, T1*T2*T3);
@@ -132,37 +139,50 @@ for i = 1:num_samples
         set(q(2), 'Vertices', V2');
         set(q(3), 'Vertices', V3');
 
-        joint1 = T1;
+        % Update joint positions for tracing
         joint1_pos = T1(1:3,4)';
-        joint2 = joint1 * T2;
+        joint2 = T1*T2;
         joint2_pos = joint2(1:3,4)';
-        joint3 = joint2 * T3;
+        joint3 = joint2*T3;
         joint3_pos = joint3(1:3,4)';
-        jointee = joint3 * Tee;
-        jointee_pos = jointee(1:3,4)';
+        ee = joint3*Tee;
+        ee_pos = ee(1:3,4)';
 
+        % Append to trace points
         trace_pts.L1 = [trace_pts.L1; joint1_pos];
         trace_pts.L2 = [trace_pts.L2; joint2_pos];
         trace_pts.L3 = [trace_pts.L3; joint3_pos];
-        trace_pts.Lee = [trace_pts.Lee; jointee_pos];
+        trace_pts.Lee = [trace_pts.Lee; ee_pos];
 
-        plot3(trace_pts.L1(:,1), trace_pts.L1(:,2), trace_pts.L1(:,3), 'r.', 'MarkerSize', 1);
-        plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
-        plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
+        % % Draw traces
+        % plot3(trace_pts.L1(:,1), trace_pts.L1(:,2), trace_pts.L1(:,3), 'r.', 'MarkerSize', 1);
+        % plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
+        % plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
         plot3(trace_pts.Lee(:,1), trace_pts.Lee(:,2), trace_pts.Lee(:,3), 'b.', 'MarkerSize', 1);
 
-        draw_frame(joint1, 30);
-        draw_frame(joint2, 30);
-        draw_frame(joint3, 30);
-        draw_frame(jointee, 30);
+        % % Draw coordinate frames
+        % draw_frame(T1, 30);
+        % draw_frame(joint2, 30);
+        % draw_frame(joint3, 30);
+        % draw_frame(ee, 30);
+        
         drawnow;
-
-        degree_angle = rad2deg(theta(:,k))';
-        fprintf("Angle Configuration (deg): %.4f, %.4f, %.4f\n", degree_angle(1), degree_angle(2), degree_angle(3));
-        fprintf("Location (mm): %.4f, %.4f, %.4f\n", jointee_pos(1), jointee_pos(2), jointee_pos(3));
-
-        ditance_correction = sample - jointee_pos;
+        
+        % Print current status
+        fprintf("Angles: [%.1f, %.1f, %.1f] deg | ", current_angle);
+        fprintf("Position: [%.1f, %.1f, %.1f] mm\n", ee_pos);
     end
+    
+    % Remove target visualization
+    delete(target_sphere);
+    
+    % Skip to next sample if singularity detected
+    if singularity_detected
+        fprintf("Skipping to next target due to singularity\n");
+        disp("--------------------------------------------------------------");
+        continue;
+    end
+    
     disp("--------------------------------------------------------------");
 end
 
@@ -199,26 +219,6 @@ function draw_frame(T, L)
              [origin(3) origin(3)+axes(3,i)], ...
              'Color', colors{i}, 'LineWidth', 2);
     end
-end
-
-function angle = wrapTo180(angle)
-    angle = mod(angle + 180, 360) - 180;
-end
-
-function filtered_solution = filter_angle(constraints, solution)
-    filtered_solution = []; % Default output
-
-    if isempty(solution)
-        return;
-    end
-
-    for i = 1:3
-        if (solution(i) < constraints(1,i) || solution(i) > constraints(2,i))
-            return
-        end
-    end
-
-    filtered_solution = solution;
 end
 
 function samples = create_samples(num_samples)
@@ -274,55 +274,6 @@ function T = BaseToTool(theta1_deg, theta2_deg, theta3_deg)
          0, 0, 0, 1];
 end
 
-function solutions = inverseKinematics(px, py, pz)
-    R = 2.8614^2 + 126.994^2;
-    C = 133.3^2 + 0.5^2;
-
-    solutions = [];
-    
-    r_squared = px^2 + py^2;
-    if r_squared < 0.2645^2
-        return;  % No valid theta1
-    end
-    
-    alpha = atan2(px, -py);
-    beta = acos(-0.2645 / sqrt(r_squared));
-    theta1_candidates = [alpha + beta, alpha - beta];
-
-    for t1 = theta1_candidates
-        c1 = cos(t1); s1 = sin(t1);
-        U = c1*px + s1*py - 1.3;
-        V = pz - 95;
-        M = 133.3*U - 0.5*V;
-        N = -0.5*U - 133.3*V;
-        L = 0.5 * (R - C - U^2 - V^2);
-
-        if M^2 + N^2 < L^2
-            continue;  % No real solution for theta2
-        end
-        
-        alpha2 = atan2(N, M);
-        beta2 = acos(L / sqrt(M^2 + N^2));
-        theta2_candidates = [alpha2 + beta2, alpha2 - beta2];
-
-        for t2 = theta2_candidates
-            c2 = cos(t2); s2 = sin(t2);
-            P = U + 133.3*c2 - 0.5*s2;
-            Q = V - 0.5*c2 - 133.3*s2;
-
-            s23 = (2.8614*P + 126.994*Q) / R;
-            c23 = (-126.994*P + 2.8614*Q) / R;
-            t3 = atan2(s23, c23) - t2;
-
-            % Convert to degrees for output
-            solutions = [solutions;
-                         rad2deg(t1), rad2deg(t2), rad2deg(t3)];
-        end
-    end
-
-    solutions = deg2rad(solutions);
-end
-
 function distance_gain = Jacobian(theta1_deg, theta2_deg, theta3_deg)
     t1 = deg2rad(theta1_deg);
     t2 = deg2rad(theta2_deg);
@@ -333,11 +284,11 @@ function distance_gain = Jacobian(theta1_deg, theta2_deg, theta3_deg)
     C23 = cos(t2 + t3); S23 = sin(t2 + t3);
     
     % Compute components
-    A = 2.8614*S23 - 126.994*C23 - 133.3*C2 + 0.5*S2 + 1.3;
-    B = 2.8614*C23 + 126.994*S23 + 133.3*S2 + 0.5*C2;
     D = 2.8614*C23 + 126.994*S23;
-    E = 126.994*C23 - 2.8614*S23 - 0.5*S2 + 133.3*C2;
+    B = D + 133.3*S2 + 0.5*C2;
     F = 126.994*C23 - 2.8614*S23;
+    E = F - 0.5*S2 + 133.3*C2;
+    A = -E + 1.3;
     
     % Jacobian matrix
     J = [ -S1*A - 0.2645*C1,  C1*B, C1*D;
