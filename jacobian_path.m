@@ -40,8 +40,10 @@ q(3) = patch('Faces', L3.F, 'Vertices', L3.V0', 'FaceColor', link_colors{3}, 'Ed
 
 %% -------------------- ANIMATION --------------------
 trace_pts = struct('L1', [], 'L2', [], 'L3', [], 'Lee', []);
-num_samples = 100;
-samples = create_samples(num_samples);
+samples = create_samples([0,50,100], [150,150,100], [-150,100,100], 100, 5);
+[num_samples, ~] = size(samples);
+disp("Generated sample points")
+disp(samples)
 current_angle = [0, 0, 90];  % Initial joint angles [deg]
 r = 5;  % Target sphere radius
 
@@ -169,12 +171,9 @@ for i = 1:num_samples
         drawnow;
         
         % Print current status
-        fprintf("Angles: [%.1f, %.1f, %.1f] deg | ", current_angle);
-        fprintf("Position: [%.1f, %.1f, %.1f] mm\n", ee_pos);
+        fprintf("Angle Configuration (deg): %.4f, %.4f, %.4f\n", current_angle);
+        fprintf("Location (mm): %.4f, %.4f, %.4f\n", ee_pos);
     end
-    
-    % Remove target visualization
-    delete(target_sphere);
     
     % Skip to next sample if singularity detected
     if singularity_detected
@@ -221,29 +220,83 @@ function draw_frame(T, L)
     end
 end
 
-function samples = create_samples(num_samples)
+function samples_path = create_samples(knot_point, start_of_arc_point, end_of_arc_point, drop_point_z_offset, N_arc_samples)
+    % Define radius boundaries
+    r_min = 50;
     r_max = 300;
-    r_min_xy = 50;
-
-    samples = [];
-
-    while size(samples, 1) < num_samples
-        % Sample in a cube, filter later
-        x = (2 * rand(num_samples, 1) - 1) * r_max;  % x ∈ [-300, 300]
-        y = (2 * rand(num_samples, 1) - 1) * r_max;  % y ∈ [-300, 300]
-        z = rand(num_samples, 1) * r_max;            % z ∈ [0, 300]
-
-        r = sqrt(x.^2 + y.^2 + z.^2);
-        % Keep points inside a hemisphere with abs(x), abs(y) ≥ 90
-        valid = (r <= r_max) & (z > 0) & ...
-                (abs(x) >= r_min_xy) & (abs(y) >= r_min_xy);
-
-        % Append valid samples
-        samples = [samples; [x(valid), y(valid), z(valid)]];
+    
+    % Initialize samples_path with the knot point
+    samples_path = knot_point;
+    
+    % Validate and add start-of-arc point
+    if ~is_valid_point(start_of_arc_point, r_min, r_max)
+        error('Start-of-arc point is out of valid radius boundary [50, 300].');
     end
+    samples_path = [samples_path; start_of_arc_point];
+    
+    % Create and validate drop point for start-of-arc
+    start_drop = [start_of_arc_point(1), start_of_arc_point(2), start_of_arc_point(3) - drop_point_z_offset];
+    if ~is_valid_point(start_drop, r_min, r_max)
+        error('Start-of-arc drop point is out of valid radius boundary [50, 300].');
+    end
+    samples_path = [samples_path; start_drop];
+    
+    % Convert start and end points to spherical coordinates
+    [az_start, el_start, r_start] = cart2sph(start_of_arc_point(1), start_of_arc_point(2), start_of_arc_point(3));
+    [az_end, el_end, r_end] = cart2sph(end_of_arc_point(1), end_of_arc_point(2), end_of_arc_point(3));
+    
+    % Adjust azimuth for shortest path
+    az_diff = az_end - az_start;
+    if abs(az_diff) > pi
+        if az_diff > 0
+            az_end_adjusted = az_end - 2*pi;
+        else
+            az_end_adjusted = az_end + 2*pi;
+        end
+    else
+        az_end_adjusted = az_end;
+    end
+    
+    % Generate interpolated arc samples
+    r_arc = linspace(r_start, r_end, N_arc_samples);
+    az_arc = linspace(az_start, az_end_adjusted, N_arc_samples);
+    el_arc = linspace(el_start, el_end, N_arc_samples);
+    
+    arc_points = zeros(N_arc_samples, 3);
+    for i = 1:N_arc_samples
+        % Wrap angles to [-pi, pi] and convert to Cartesian
+        az_i = wrapToPi(az_arc(i));
+        el_i = wrapToPi(el_arc(i));
+        [x, y, z] = sph2cart(az_i, el_i, r_arc(i));
+        arc_points(i,:) = [x, y, z];
+        
+        % Validate generated point
+        if ~is_valid_point(arc_points(i,:), r_min, r_max)
+            error('Generated arc point is out of valid radius boundary [50, 300].');
+        end
+    end
+    samples_path = [samples_path; arc_points];
+    
+    % Create and validate drop point for end-of-arc
+    end_drop = [end_of_arc_point(1), end_of_arc_point(2), end_of_arc_point(3) - drop_point_z_offset];
+    if ~is_valid_point(end_drop, r_min, r_max)
+        error('End-of-arc drop point is out of valid radius boundary [50, 300].');
+    end
+    samples_path = [samples_path; end_drop];
+    
+    % Add end-of-arc point and return to knot point
+    samples_path = [samples_path; end_of_arc_point; knot_point];
+end
 
-    % Trim to exact number
-    samples = samples(1:num_samples, :);
+% Helper function to check point validity
+function is_valid = is_valid_point(point, r_min, r_max)
+    r = norm(point);
+    is_valid = (r >= r_min && r <= r_max);
+end
+
+% Helper function to wrap angles to [-pi, pi]
+function angle_wrapped = wrapToPi(angle)
+    angle_wrapped = mod(angle + pi, 2*pi) - pi;
 end
 
 function T = BaseToTool(theta1_deg, theta2_deg, theta3_deg)

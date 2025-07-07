@@ -40,13 +40,16 @@ q(3) = patch('Faces', L3.F, 'Vertices', L3.V0', 'FaceColor', link_colors{3}, 'Ed
 
 %% -------------------- ANIMATION --------------------
 trace_pts = struct('L1', [], 'L2', [], 'L3', [], 'Lee', []);
-num_samples = 10;
-samples = create_samples(num_samples);
+samples = create_samples([0,50,100], [150,150,100], [-150,100,100], 100, 5);
+[num_samples, ~] = size(samples);
+disp("Generated sample points")
+disp(samples)
 steps = 20;
 current_angle = [0, 0, 90];  % degrees
 r = 5;
-angle_constaints = [-100 -80 -90; 100 80 90];
+angle_constaints = [-300 -120 -250; 300 120 250];
 constraints = deg2rad(angle_constaints);
+position_tolerance = 1;  % 1 mm position tolerance
 
 for i = 1:num_samples
     sample = samples(i,:);
@@ -67,30 +70,56 @@ for i = 1:num_samples
     best_solution = [];
     min_coordinate_error = [];
     min_error = Inf;
-
+    min_joint_distance = Inf;
+    
+    % ========== NEW SOLUTION SELECTION LOGIC ========== %
+    % First pass: find minimum position error
     for j = 1:size(all_solutions, 1)
         sol_deg = rad2deg(all_solutions(j,:));
-    
-        % Filter BEFORE using
         sol_deg = filter_angle(angle_constaints, sol_deg);
         if isempty(sol_deg)
-            continue;  % Skip this solution
+            continue;
         end
-    
+        
         T = BaseToTool(sol_deg(1), sol_deg(2), sol_deg(3));
         coordinate_error = [px_target, py_target, pz_target] - T(1:3,4)';
         position_error = norm(coordinate_error);
-        angle_error = norm(wrapTo180(current_angle - sol_deg));
-    
+        
         if position_error < min_error
-            min_coordinate_error = coordinate_error;
             min_error = position_error;
-            best_solution = sol_deg;
         end
     end
+    
+    % Second pass: find solution with smallest joint space distance
+    % within position tolerance
+    for j = 1:size(all_solutions, 1)
+        sol_deg = rad2deg(all_solutions(j,:));
+        sol_deg = filter_angle(angle_constaints, sol_deg);
+        if isempty(sol_deg)
+            continue;
+        end
+        
+        T = BaseToTool(sol_deg(1), sol_deg(2), sol_deg(3));
+        coordinate_error = [px_target, py_target, pz_target] - T(1:3,4)';
+        position_error = norm(coordinate_error);
+        
+        % Only consider solutions within tolerance of best position error
+        if position_error <= min_error + position_tolerance
+            % Calculate joint space distance with wrapping
+            joint_diff = wrapTo180(sol_deg - current_angle);
+            joint_distance = norm(joint_diff);
+            
+            if joint_distance < min_joint_distance
+                min_joint_distance = joint_distance;
+                min_coordinate_error = coordinate_error;
+                best_solution = sol_deg;
+            end
+        end
+    end
+    % ========== END NEW SOLUTION SELECTION ========== %
 
     if isempty(best_solution)
-        disp("There is no solution for the new location. Skip to the next available point.")
+        disp("No valid solution. Skipping point.")
         disp("--------------------------------------------------------------");
         continue
     end
@@ -101,16 +130,44 @@ for i = 1:num_samples
     target_ball = surf(sx, sy, sz, 'FaceColor', 'magenta', 'EdgeColor', 'none', 'FaceAlpha', 0.3);
     drawnow;
     
-    % Velocity calculation
+    % ========== NEW VELOCITY CONTROL WITH BOUNCE BACK ========== %
     delta_angle = wrapTo180(best_solution - current_angle);
-    vel = delta_angle / steps;
     theta = zeros(3, steps);
-
+    safety_margin = 5;  % degrees from constraint boundary
+    
     for s = 1:steps
-        step_angle = current_angle + vel * s;
-        theta(:,s) = deg2rad(step_angle);
+        % Calculate progress ratio (0 to 1)
+        progress = s / steps;
+        
+        % Calculate current target angles for this step
+        target_angles = current_angle + delta_angle * progress;
+        
+        % Apply velocity reduction near constraints (bounce back)
+        for joint = 1:3
+            % Distance to lower constraint
+            dist_lower = target_angles(joint) - angle_constaints(1, joint);
+            
+            % Distance to upper constraint
+            dist_upper = angle_constaints(2, joint) - target_angles(joint);
+            
+            % If close to boundary, reduce velocity
+            if dist_lower < safety_margin
+                reduction = (dist_lower / safety_margin)^2;
+                target_angles(joint) = current_angle(joint) + ...
+                    delta_angle(joint) * progress * reduction;
+            elseif dist_upper < safety_margin
+                reduction = (dist_upper / safety_margin)^2;
+                target_angles(joint) = current_angle(joint) + ...
+                    delta_angle(joint) * progress * reduction;
+            end
+        end
+        
+        % Store the angles for this step
+        theta(:, s) = deg2rad(target_angles);
     end
-    current_angle = best_solution;
+    
+    current_angle = best_solution;  % Update current angles after movement
+    % ========== END VELOCITY CONTROL ========== %
 
     for k = 1:steps
         T1 = [rotz(theta(1,k)), [0;0;0]; 0 0 0 1];
@@ -140,23 +197,14 @@ for i = 1:num_samples
         trace_pts.L3 = [trace_pts.L3; joint3_pos];
         trace_pts.Lee = [trace_pts.Lee; jointee_pos];
 
-        plot3(trace_pts.L1(:,1), trace_pts.L1(:,2), trace_pts.L1(:,3), 'r.', 'MarkerSize', 1);
-        plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
-        plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
         plot3(trace_pts.Lee(:,1), trace_pts.Lee(:,2), trace_pts.Lee(:,3), 'b.', 'MarkerSize', 1);
-
-        draw_frame(joint1, 30);
-        draw_frame(joint2, 30);
-        draw_frame(joint3, 30);
-        draw_frame(jointee, 30);
         drawnow;
 
         degree_angle = rad2deg(theta(:,k))';
         fprintf("Angle Configuration (deg): %.4f, %.4f, %.4f\n", degree_angle(1), degree_angle(2), degree_angle(3));
         fprintf("Location (mm): %.4f, %.4f, %.4f\n", jointee_pos(1), jointee_pos(2), jointee_pos(3));
-
-        ditance_correction = sample - jointee_pos;
     end
+    delete(target_ball);
     disp("--------------------------------------------------------------");
 end
 
@@ -215,29 +263,83 @@ function filtered_solution = filter_angle(constraints, solution)
     filtered_solution = solution;
 end
 
-function samples = create_samples(num_samples)
+function samples_path = create_samples(knot_point, start_of_arc_point, end_of_arc_point, drop_point_z_offset, N_arc_samples)
+    % Define radius boundaries
+    r_min = 50;
     r_max = 300;
-    r_min_xy = 50;
-
-    samples = [];
-
-    while size(samples, 1) < num_samples
-        % Sample in a cube, filter later
-        x = (2 * rand(num_samples, 1) - 1) * r_max;  % x ∈ [-300, 300]
-        y = (2 * rand(num_samples, 1) - 1) * r_max;  % y ∈ [-300, 300]
-        z = rand(num_samples, 1) * r_max;            % z ∈ [0, 300]
-
-        r = sqrt(x.^2 + y.^2 + z.^2);
-        % Keep points inside a hemisphere with abs(x), abs(y) ≥ 90
-        valid = (r <= r_max) & (z > 0) & ...
-                (abs(x) >= r_min_xy) & (abs(y) >= r_min_xy);
-
-        % Append valid samples
-        samples = [samples; [x(valid), y(valid), z(valid)]];
+    
+    % Initialize samples_path with the knot point
+    samples_path = knot_point;
+    
+    % Validate and add start-of-arc point
+    if ~is_valid_point(start_of_arc_point, r_min, r_max)
+        error('Start-of-arc point is out of valid radius boundary [50, 300].');
     end
+    samples_path = [samples_path; start_of_arc_point];
+    
+    % Create and validate drop point for start-of-arc
+    start_drop = [start_of_arc_point(1), start_of_arc_point(2), start_of_arc_point(3) - drop_point_z_offset];
+    if ~is_valid_point(start_drop, r_min, r_max)
+        error('Start-of-arc drop point is out of valid radius boundary [50, 300].');
+    end
+    samples_path = [samples_path; start_drop];
+    
+    % Convert start and end points to spherical coordinates
+    [az_start, el_start, r_start] = cart2sph(start_of_arc_point(1), start_of_arc_point(2), start_of_arc_point(3));
+    [az_end, el_end, r_end] = cart2sph(end_of_arc_point(1), end_of_arc_point(2), end_of_arc_point(3));
+    
+    % Adjust azimuth for shortest path
+    az_diff = az_end - az_start;
+    if abs(az_diff) > pi
+        if az_diff > 0
+            az_end_adjusted = az_end - 2*pi;
+        else
+            az_end_adjusted = az_end + 2*pi;
+        end
+    else
+        az_end_adjusted = az_end;
+    end
+    
+    % Generate interpolated arc samples
+    r_arc = linspace(r_start, r_end, N_arc_samples);
+    az_arc = linspace(az_start, az_end_adjusted, N_arc_samples);
+    el_arc = linspace(el_start, el_end, N_arc_samples);
+    
+    arc_points = zeros(N_arc_samples, 3);
+    for i = 1:N_arc_samples
+        % Wrap angles to [-pi, pi] and convert to Cartesian
+        az_i = wrapToPi(az_arc(i));
+        el_i = wrapToPi(el_arc(i));
+        [x, y, z] = sph2cart(az_i, el_i, r_arc(i));
+        arc_points(i,:) = [x, y, z];
+        
+        % Validate generated point
+        if ~is_valid_point(arc_points(i,:), r_min, r_max)
+            error('Generated arc point is out of valid radius boundary [50, 300].');
+        end
+    end
+    samples_path = [samples_path; arc_points];
+    
+    % Create and validate drop point for end-of-arc
+    end_drop = [end_of_arc_point(1), end_of_arc_point(2), end_of_arc_point(3) - drop_point_z_offset];
+    if ~is_valid_point(end_drop, r_min, r_max)
+        error('End-of-arc drop point is out of valid radius boundary [50, 300].');
+    end
+    samples_path = [samples_path; end_drop];
+    
+    % Add end-of-arc point and return to knot point
+    samples_path = [samples_path; end_of_arc_point; knot_point];
+end
 
-    % Trim to exact number
-    samples = samples(1:num_samples, :);
+% Helper function to check point validity
+function is_valid = is_valid_point(point, r_min, r_max)
+    r = norm(point);
+    is_valid = (r >= r_min && r <= r_max);
+end
+
+% Helper function to wrap angles to [-pi, pi]
+function angle_wrapped = wrapToPi(angle)
+    angle_wrapped = mod(angle + pi, 2*pi) - pi;
 end
 
 function T = BaseToTool(theta1_deg, theta2_deg, theta3_deg)
