@@ -44,7 +44,8 @@ samples = create_samples([0,50,100], [150,150,100], [-150,100,100], 100, 5);
 [num_samples, ~] = size(samples);
 disp("Generated sample points")
 disp(samples)
-current_angle = [0, 0, 90];  % Initial joint angles [deg]
+disp("--------------------------------------------------------------");
+current_angle = [270,-66,156]; % Initial joint angles [deg]
 r = 5;  % Target sphere radius
 
 % Motion control parameters
@@ -161,7 +162,7 @@ for i = 1:num_samples
         % plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
         % plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
         plot3(trace_pts.Lee(:,1), trace_pts.Lee(:,2), trace_pts.Lee(:,3), 'b.', 'MarkerSize', 1);
-
+        % 
         % % Draw coordinate frames
         % draw_frame(T1, 30);
         % draw_frame(joint2, 30);
