@@ -58,6 +58,12 @@ max_steps = 100;     % Maximum steps per target
 singularity_threshold = 1e5;  % Condition number threshold for singularity
 reachability = 250;  % Maximum radius
 
+% Initialize data recording arrays
+time_steps = [];
+all_angles = [];
+all_velocities = [];
+total_time = 0;
+
 for i = 1:num_samples
     % Get current target position
     target_pos = samples(i,:);
@@ -85,8 +91,10 @@ for i = 1:num_samples
     singularity_detected = false;
     
     % Motion control loop
-    while error_norm >= tolerance
+    while error_norm >= tolerance && step < max_steps
         step = step + 1;
+        total_time = total_time + dt;
+        time_steps = [time_steps; total_time];
 
         % Compute current end-effector position
         T_current = BaseToTool(current_angle(1), current_angle(2), current_angle(3));
@@ -120,6 +128,10 @@ for i = 1:num_samples
         % Convert to deg/s and clamp velocities
         theta_dot_deg = rad2deg(theta_dot_rad)';
         theta_dot_deg = sign(theta_dot_deg) .* min(abs(theta_dot_deg), max_joint_vel);
+        
+        % Record current angles and velocities
+        all_angles = [all_angles; current_angle];
+        all_velocities = [all_velocities; theta_dot_deg];
         
         % Update joint angles
         current_angle = current_angle + theta_dot_deg * dt;
@@ -162,7 +174,7 @@ for i = 1:num_samples
         % plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
         % plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
         plot3(trace_pts.Lee(:,1), trace_pts.Lee(:,2), trace_pts.Lee(:,3), 'b.', 'MarkerSize', 1);
-        % 
+        
         % % Draw coordinate frames
         % draw_frame(T1, 30);
         % draw_frame(joint2, 30);
@@ -176,6 +188,10 @@ for i = 1:num_samples
         fprintf("Location (mm): %.4f, %.4f, %.4f\n", ee_pos);
     end
     
+    % Record final state for this target
+    all_angles = [all_angles; current_angle];
+    all_velocities = [all_velocities; [0, 0, 0]];  % Zero velocity at target
+    
     % Skip to next sample if singularity detected
     if singularity_detected
         fprintf("Skipping to next target due to singularity\n");
@@ -185,6 +201,56 @@ for i = 1:num_samples
     
     disp("--------------------------------------------------------------");
 end
+
+%% -------------------- PLOT JOINT DATA --------------------
+% Calculate angular acceleration using central differences with zero padding
+acceleration_data = [[0,0,0]; all_velocities; [0,0,0]];  % Pad velocities with zeros at both ends
+
+% Compute acceleration using central differences
+n = size(all_velocities, 1);
+acceleration = zeros(n, 3);  % Preallocate acceleration array
+
+for j = 1:3  % For each joint
+    for i = 1:n  % For each time point
+        % Central difference: (f(i+1) - f(i-1)) / (2*dt)
+        acceleration(i, j) = (acceleration_data(i+2, j) - acceleration_data(i, j)) / (2*dt);
+    end
+end
+
+% Create time vector for plotting
+time_vector = (0:length(all_angles)-1)*dt;
+
+% Plot joint motion profiles
+joint_names = {'Joint 1', 'Joint 2', 'Joint 3'};
+figure('Position', [100, 100, 1200, 800]);
+
+for j = 1:3
+    % Angular Displacement
+    subplot(3, 3, j);
+    plot(time_vector, all_angles(:, j), 'LineWidth', 2);
+    title([joint_names{j} ' - Angular Displacement']);
+    xlabel('Time (s)');
+    ylabel('Angle (deg)');
+    grid on;
+    
+    % Angular Velocity
+    subplot(3, 3, j+3);
+    plot(time_vector, all_velocities(:, j), 'LineWidth', 2);
+    title([joint_names{j} ' - Angular Velocity']);
+    xlabel('Time (s)');
+    ylabel('Velocity (deg/s)');
+    grid on;
+    
+    % Angular Acceleration
+    subplot(3, 3, j+6);
+    plot(time_vector, acceleration(:, j), 'LineWidth', 2);
+    title([joint_names{j} ' - Angular Acceleration']);
+    xlabel('Time (s)');
+    ylabel('Acceleration (deg/s²)');
+    grid on;
+end
+
+sgtitle('Joint Motion Profiles');
 
 %% -------------------- FUNCTIONS --------------------
 function [F, V] = load_link(filename, ref_point, R_align)

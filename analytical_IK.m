@@ -52,6 +52,12 @@ angle_constaints = [-300 -120 -250; 300 120 250];
 constraints = deg2rad(angle_constaints);
 position_tolerance = 1;  % 1 mm position tolerance
 
+% Data recording variables
+all_angles = [];          % Stores joint angles during motion
+all_times = [];           % Stores time stamps
+current_time = 0;         % Current simulation time
+step_dt = 0.1;            % Time per step (seconds)
+
 for i = 1:num_samples
     sample = samples(i,:);
     px_target = sample(1);
@@ -73,7 +79,7 @@ for i = 1:num_samples
     min_error = Inf;
     min_joint_distance = Inf;
     
-    % ========== NEW SOLUTION SELECTION LOGIC ========== %
+    % ========== SOLUTION SELECTION LOGIC ========== %
     % First pass: find minimum position error
     for j = 1:size(all_solutions, 1)
         sol_deg = rad2deg(all_solutions(j,:));
@@ -92,7 +98,6 @@ for i = 1:num_samples
     end
     
     % Second pass: find solution with smallest joint space distance
-    % within position tolerance
     for j = 1:size(all_solutions, 1)
         sol_deg = rad2deg(all_solutions(j,:));
         sol_deg = filter_angle(angle_constaints, sol_deg);
@@ -104,9 +109,7 @@ for i = 1:num_samples
         coordinate_error = [px_target, py_target, pz_target] - T(1:3,4)';
         position_error = norm(coordinate_error);
         
-        % Only consider solutions within tolerance of best position error
         if position_error <= min_error + position_tolerance
-            % Calculate joint space distance with wrapping
             joint_diff = wrapTo180(sol_deg - current_angle);
             joint_distance = norm(joint_diff);
             
@@ -117,7 +120,6 @@ for i = 1:num_samples
             end
         end
     end
-    % ========== END NEW SOLUTION SELECTION ========== %
 
     if isempty(best_solution)
         disp("No valid solution. Skipping point.")
@@ -131,27 +133,19 @@ for i = 1:num_samples
     target_ball = surf(sx, sy, sz, 'FaceColor', 'magenta', 'EdgeColor', 'none', 'FaceAlpha', 0.3);
     drawnow;
     
-    % ========== NEW VELOCITY CONTROL WITH BOUNCE BACK ========== %
+    % ========== VELOCITY CONTROL ========== %
     delta_angle = wrapTo180(best_solution - current_angle);
     theta = zeros(3, steps);
     safety_margin = 5;  % degrees from constraint boundary
     
     for s = 1:steps
-        % Calculate progress ratio (0 to 1)
         progress = s / steps;
-        
-        % Calculate current target angles for this step
         target_angles = current_angle + delta_angle * progress;
         
-        % Apply velocity reduction near constraints (bounce back)
         for joint = 1:3
-            % Distance to lower constraint
             dist_lower = target_angles(joint) - angle_constaints(1, joint);
-            
-            % Distance to upper constraint
             dist_upper = angle_constaints(2, joint) - target_angles(joint);
             
-            % If close to boundary, reduce velocity
             if dist_lower < safety_margin
                 reduction = (dist_lower / safety_margin)^2;
                 target_angles(joint) = current_angle(joint) + ...
@@ -163,14 +157,19 @@ for i = 1:num_samples
             end
         end
         
-        % Store the angles for this step
         theta(:, s) = deg2rad(target_angles);
     end
     
-    current_angle = best_solution;  % Update current angles after movement
-    % ========== END VELOCITY CONTROL ========== %
+    current_angle = best_solution;
 
     for k = 1:steps
+        % Record current joint angles
+        current_angles_deg = rad2deg(theta(:, k))';
+        all_angles = [all_angles; current_angles_deg];
+        all_times = [all_times; current_time];
+        current_time = current_time + step_dt;
+        
+        % Update visualization
         T1 = [rotz(theta(1,k)), [0;0;0]; 0 0 0 1];
         T2 = [roty(theta(2,k)), d12'; 0 0 0 1];
         T3 = [roty(theta(3,k)), d23'; 0 0 0 1];
@@ -203,7 +202,7 @@ for i = 1:num_samples
         % plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
         % plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
         plot3(trace_pts.Lee(:,1), trace_pts.Lee(:,2), trace_pts.Lee(:,3), 'b.', 'MarkerSize', 1);
-        % 
+        
         % % Draw coordinate frames
         % draw_frame(T1, 30);
         % draw_frame(joint2, 30);
@@ -219,6 +218,47 @@ for i = 1:num_samples
 
     disp("--------------------------------------------------------------");
 end
+
+%% -------------------- PLOT JOINT DATA --------------------
+% Calculate angular velocity (first derivative)
+velocity = diff(all_angles) / step_dt;
+velocity = [velocity; zeros(1, 3)];  % Pad to match size
+
+% Calculate angular acceleration (second derivative)
+acceleration = diff(velocity) / step_dt;
+acceleration = [acceleration; zeros(1, 3)];  % Pad to match size
+
+% Create plots
+joint_names = {'Joint 1', 'Joint 2', 'Joint 3'};
+figure('Position', [100, 100, 1200, 800]);
+
+for j = 1:3
+    % Angular Displacement
+    subplot(3,3,j);
+    plot(all_times, all_angles(:,j), 'LineWidth', 2);
+    title([joint_names{j} ' - Angular Displacement']);
+    xlabel('Time (s)');
+    ylabel('Angle (deg)');
+    grid on;
+    
+    % Angular Velocity
+    subplot(3,3,j+3);
+    plot(all_times, velocity(:,j), 'LineWidth', 2);
+    title([joint_names{j} ' - Angular Velocity']);
+    xlabel('Time (s)');
+    ylabel('Velocity (deg/s)');
+    grid on;
+    
+    % Angular Acceleration
+    subplot(3,3,j+6);
+    plot(all_times, acceleration(:,j), 'LineWidth', 2);
+    title([joint_names{j} ' - Angular Acceleration']);
+    xlabel('Time (s)');
+    ylabel('Acceleration (deg/s²)');
+    grid on;
+end
+
+sgtitle('Joint Motion Profiles');
 
 %% -------------------- FUNCTIONS --------------------
 function [F, V] = load_link(filename, ref_point, R_align)
