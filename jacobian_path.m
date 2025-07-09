@@ -62,6 +62,7 @@ reachability = 250;  % Maximum radius
 time_steps = [];
 all_angles = [];
 all_velocities = [];
+all_angular_vel = [];
 total_time = 0;
 
 for i = 1:num_samples
@@ -155,6 +156,7 @@ for i = 1:num_samples
         set(q(3), 'Vertices', V3');
 
         % Update joint positions for tracing
+        joint1 = T1;
         joint1_pos = T1(1:3,4)';
         joint2 = T1*T2;
         joint2_pos = joint2(1:3,4)';
@@ -162,6 +164,10 @@ for i = 1:num_samples
         joint3_pos = joint3(1:3,4)';
         ee = joint3*Tee;
         ee_pos = ee(1:3,4)';
+
+        % Angular velocity
+        angle_vel = [joint1(1:3,3), joint2(1:3,3), joint3(1:3,3)] * theta_rad';
+        all_angular_vel = [all_angular_vel; angle_vel'];
 
         % Append to trace points
         trace_pts.L1 = [trace_pts.L1; joint1_pos];
@@ -191,6 +197,7 @@ for i = 1:num_samples
     % Record final state for this target
     all_angles = [all_angles; current_angle];
     all_velocities = [all_velocities; [0, 0, 0]];  % Zero velocity at target
+    all_angular_vel = [all_angular_vel; [0,0,0]];
     
     % Skip to next sample if singularity detected
     if singularity_detected
@@ -249,8 +256,20 @@ for j = 1:3
     ylabel('Acceleration (deg/s²)');
     grid on;
 end
-
 sgtitle('Joint Motion Profiles');
+
+% Plot end effector motion profiles
+figure;
+axis_name = {'n', 'o', 'a'};
+for i = 1:3
+    subplot(3,1,i)
+    plot(time_vector, all_angular_vel(:, j), 'LineWidth', 2);
+    title([axis_name{i} ' - Angular Velocity']);
+    xlabel('Time (s)');
+    ylabel('Velocity (deg/s)');
+    grid on;
+end
+sgtitle('Angular Velocity of End Effector')
 
 %% -------------------- FUNCTIONS --------------------
 function [F, V] = load_link(filename, ref_point, R_align)
@@ -289,8 +308,8 @@ end
 
 function samples_path = create_samples(knot_point, start_of_arc_point, end_of_arc_point, drop_point_z_offset, N_arc_samples)
     % Define radius boundaries
-    r_min = 50;
-    r_max = 300;
+    r_min = 28;
+    r_max = 347;
     
     % Initialize samples_path with the knot point
     samples_path = knot_point;

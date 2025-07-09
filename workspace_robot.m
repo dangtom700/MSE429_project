@@ -92,8 +92,8 @@ grid on; axis equal;
 %% Workspace Analysis
 % Define angle ranges (degrees)
 t1_range = -100:5:100;    % Shoulder rotation
-t2_range = -90:5:90;    % Upper arm flexion
-t3_range = -90:5:90;  % Forearm flexion
+t2_range = -60:5:60;    % Upper arm flexion
+t3_range = -125:5:125;  % Forearm flexion
 num_samples = numel(t1_range)*numel(t2_range)*numel(t3_range);
 
 % Generate workspace
