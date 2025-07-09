@@ -120,7 +120,9 @@ for i = 1:num_samples
             break;
         end
         
-        fprintf("Step %d: cond(J) = %.2f, Error: %.2f mm\n", step, condJ, error_norm);
+        fprintf("--------------\nStep %d: cond(J) = %.2f, Error: %.2f mm\n", step, condJ, error_norm);
+        disp("Analytical (Derivative) Jacobian matrix")
+        disp(Jk)
         
         % Compute joint velocities using damped least squares
         J_pinv = Jk' / (Jk*Jk' + lambda^2*eye(3));
@@ -157,17 +159,32 @@ for i = 1:num_samples
 
         % Update joint positions for tracing
         joint1 = T1;
+        joint1_axis = joint1(1:3,3);
         joint1_pos = T1(1:3,4)';
+
         joint2 = T1*T2;
+        joint2_axis = joint2(1:3,2);
         joint2_pos = joint2(1:3,4)';
+
         joint3 = joint2*T3;
+        joint3_axis = joint3(1:3,2);
         joint3_pos = joint3(1:3,4)';
+
         ee = joint3*Tee;
         ee_pos = ee(1:3,4)';
 
         % Angular velocity
-        angle_vel = [joint1(1:3,3), joint2(1:3,3), joint3(1:3,3)] * theta_rad';
-        all_angular_vel = [all_angular_vel; angle_vel'];
+        angle_vel = ([joint1_axis, joint2_axis, joint3_axis] * theta_rad')';
+        all_angular_vel = [all_angular_vel; angle_vel];
+
+        % Check the Jacobian matrix with cross product
+        JP1 = cross(joint1_axis, (ee_pos - joint1_pos)');
+        JP2 = cross(joint2_axis, (ee_pos - joint2_pos)');
+        JP3 = cross(joint3_axis, (ee_pos - joint3_pos)');
+        J_cross = [JP1, JP2, JP3];
+        disp("Geometric (cross product) Jacobian matrix")
+        disp(J_cross);
+        fprintf("Total relative difference in Jacobian matrix: %.12f\n", sum(sum(abs(J_cross - Jk)./(Jk+1))));
 
         % Append to trace points
         trace_pts.L1 = [trace_pts.L1; joint1_pos];
@@ -190,6 +207,7 @@ for i = 1:num_samples
         drawnow;
         
         % Print current status
+        fprintf("Angular velocity of end effector: %.4f, %.4f, %.4f\n", angle_vel)
         fprintf("Angle Configuration (deg): %.4f, %.4f, %.4f\n", current_angle);
         fprintf("Location (mm): %.4f, %.4f, %.4f\n", ee_pos);
     end
@@ -413,7 +431,7 @@ function T = BaseToTool(theta1_deg, theta2_deg, theta3_deg)
          0, 0, 0, 1];
 end
 
-function distance_gain = Jacobian(theta1_deg, theta2_deg, theta3_deg)
+function J = Jacobian(theta1_deg, theta2_deg, theta3_deg)
     t1 = deg2rad(theta1_deg);
     t2 = deg2rad(theta2_deg);
     t3 = deg2rad(theta3_deg);
@@ -433,6 +451,4 @@ function distance_gain = Jacobian(theta1_deg, theta2_deg, theta3_deg)
     J = [ -S1*A - 0.2645*C1,  C1*B, C1*D;
            C1*A - 0.2645*S1,  S1*B, S1*D;
            0,                E,    F ];
-       
-    distance_gain = J;
 end
