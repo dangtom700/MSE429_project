@@ -40,7 +40,7 @@ q(3) = patch('Faces', L3.F, 'Vertices', L3.V0', 'FaceColor', link_colors{3}, 'Ed
 
 %% -------------------- ANIMATION --------------------
 trace_pts = struct('L1', [], 'L2', [], 'L3', [], 'Lee', []);
-samples = create_samples([0,50,100], [150,150,100], [-150,100,100], 100, 5);
+samples = create_samples([0,50,100], [150,150,100], [-150,100,100], 50, 5);
 [num_samples, ~] = size(samples);
 disp("Generated sample points")
 disp(samples)
@@ -54,16 +54,17 @@ dt = 0.1;            % Time step [s]
 tolerance = 5;       % Position tolerance [mm]
 max_joint_vel = 30;  % Maximum joint velocity [deg/s]
 lambda = 0.1;        % Damping factor for singularity handling
-max_steps = 100;     % Maximum steps per target
 singularity_threshold = 1e5;  % Condition number threshold for singularity
 reachability = 250;  % Maximum radius
+force_vec = [0, 0, -5, 0, 0, 0]; % Force vector in universal frame (N)
 
 % Initialize data recording arrays
-time_steps = [];
 all_angles = [];
 all_velocities = [];
 all_angular_vel = [];
-total_time = 0;
+all_tao = [];
+all_J_error = [];
+all_power = [];
 
 for i = 1:num_samples
     % Get current target position
@@ -88,14 +89,12 @@ for i = 1:num_samples
                       'FaceColor', 'magenta', 'EdgeColor', 'none', 'FaceAlpha', 0.3);
     drawnow;
     error_norm = tolerance;
-    step = 0;
     singularity_detected = false;
+    step = 0;
     
     % Motion control loop
-    while error_norm >= tolerance && step < max_steps
+    while error_norm >= tolerance
         step = step + 1;
-        total_time = total_time + dt;
-        time_steps = [time_steps; total_time];
 
         % Compute current end-effector position
         T_current = BaseToTool(current_angle(1), current_angle(2), current_angle(3));
@@ -121,8 +120,6 @@ for i = 1:num_samples
         end
         
         fprintf("--------------\nStep %d: cond(J) = %.2f, Error: %.2f mm\n", step, condJ, error_norm);
-        disp("Analytical (Derivative) Jacobian matrix")
-        disp(Jk)
         
         % Compute joint velocities using damped least squares
         J_pinv = Jk' / (Jk*Jk' + lambda^2*eye(3));
@@ -174,17 +171,17 @@ for i = 1:num_samples
         ee_pos = ee(1:3,4)';
 
         % Angular velocity
-        angle_vel = ([joint1_axis, joint2_axis, joint3_axis] * theta_rad')';
+        J_omega = [joint1_axis, joint2_axis, joint3_axis];
+        angle_vel = (J_omega * theta_rad')';
         all_angular_vel = [all_angular_vel; angle_vel];
 
         % Check the Jacobian matrix with cross product
         JP1 = cross(joint1_axis, (ee_pos - joint1_pos)');
         JP2 = cross(joint2_axis, (ee_pos - joint2_pos)');
         JP3 = cross(joint3_axis, (ee_pos - joint3_pos)');
-        J_cross = [JP1, JP2, JP3];
-        disp("Geometric (cross product) Jacobian matrix")
-        disp(J_cross);
-        fprintf("Total relative difference in Jacobian matrix: %.12f\n", sum(sum(abs(J_cross - Jk)./(Jk+1))));
+        J_cross = [JP1, JP2, JP3]; filler = zeros(3,3); filler(3,1) = 1;
+        J_error = sum(abs(J_cross - Jk)./(Jk + filler));
+        all_J_error = [all_J_error; J_error];
 
         % Append to trace points
         trace_pts.L1 = [trace_pts.L1; joint1_pos];
@@ -192,30 +189,42 @@ for i = 1:num_samples
         trace_pts.L3 = [trace_pts.L3; joint3_pos];
         trace_pts.Lee = [trace_pts.Lee; ee_pos];
 
-        % % Draw traces
-        % plot3(trace_pts.L1(:,1), trace_pts.L1(:,2), trace_pts.L1(:,3), 'r.', 'MarkerSize', 1);
-        % plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
-        % plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
+        % Draw traces
+        plot3(trace_pts.L1(:,1), trace_pts.L1(:,2), trace_pts.L1(:,3), 'r.', 'MarkerSize', 1);
+        plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
+        plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
         plot3(trace_pts.Lee(:,1), trace_pts.Lee(:,2), trace_pts.Lee(:,3), 'b.', 'MarkerSize', 1);
         
-        % % Draw coordinate frames
-        % draw_frame(T1, 30);
-        % draw_frame(joint2, 30);
-        % draw_frame(joint3, 30);
-        % draw_frame(ee, 30);
+        % Draw coordinate frames
+        draw_frame(T1, 30);
+        draw_frame(joint2, 30);
+        draw_frame(joint3, 30);
+        draw_frame(ee, 30);
         
         drawnow;
+
+        % Calculate the power usage
+        tao = force_vec * [Jk;J_omega];
+        all_tao = [all_tao; tao];
+        power = tao * theta_dot_rad;
+        all_power = [all_power, power];
         
         % Print current status
-        fprintf("Angular velocity of end effector: %.4f, %.4f, %.4f\n", angle_vel)
         fprintf("Angle Configuration (deg): %.4f, %.4f, %.4f\n", current_angle);
         fprintf("Location (mm): %.4f, %.4f, %.4f\n", ee_pos);
+        disp("Geometric (cross product) Jacobian matrix")
+        disp(J_cross);
+        disp("Analytical (derivative) Jacobian matrix")
+        disp(Jk)
     end
     
     % Record final state for this target
     all_angles = [all_angles; current_angle];
-    all_velocities = [all_velocities; [0, 0, 0]];  % Zero velocity at target
+    all_velocities = [all_velocities; [0, 0, 0]];
     all_angular_vel = [all_angular_vel; [0,0,0]];
+    all_power = [all_power, 0];
+    all_tao = [all_tao; [0, 0, 0]];
+    all_J_error = [all_J_error; [0, 0, 0]];
     
     % Skip to next sample if singularity detected
     if singularity_detected
@@ -244,10 +253,11 @@ end
 
 % Create time vector for plotting
 time_vector = (0:length(all_angles)-1)*dt;
+all_J_error(1, :) = [0,0,0];
 
 % Plot joint motion profiles
 joint_names = {'Joint 1', 'Joint 2', 'Joint 3'};
-figure('Position', [100, 100, 1200, 800]);
+figure;
 
 for j = 1:3
     % Angular Displacement
@@ -271,23 +281,45 @@ for j = 1:3
     plot(time_vector, acceleration(:, j), 'LineWidth', 2);
     title([joint_names{j} ' - Angular Acceleration']);
     xlabel('Time (s)');
-    ylabel('Acceleration (deg/s²)');
+    ylabel('Acceleration (deg/s^2)');
     grid on;
 end
 sgtitle('Joint Motion Profiles');
 
 % Plot end effector motion profiles
 figure;
-axis_name = {'n', 'o', 'a'};
+axis_name = {'alpha', 'beta', 'gamma'};
 for i = 1:3
-    subplot(3,1,i)
-    plot(time_vector, all_angular_vel(:, j), 'LineWidth', 2);
+    subplot(3,3,i)
+    plot(time_vector, all_angular_vel(:, i), 'LineWidth', 2);
     title([axis_name{i} ' - Angular Velocity']);
     xlabel('Time (s)');
     ylabel('Velocity (deg/s)');
     grid on;
+
+    subplot(3, 3, i+3)
+    plot(time_vector, all_tao(:, i), 'LineWidth', 2);
+    title([axis_name{i} '- Angular Momentum']);
+    xlabel('Time (s)');
+    ylabel('Momentum (kg*mm^2/s)');
+    grid on;
+
+    subplot(3, 3, i+6)
+    plot(time_vector, all_J_error(:, i), 'LineWidth', 2);
+    title([axis_name{i} ' - Jacobian Error']);
+    xlabel('Time (s)');
+    ylabel('Sum Relative Error (unitless)');
+    grid on;
 end
-sgtitle('Angular Velocity of End Effector')
+sgtitle('End Effector Motion Profile')
+
+% Plot power usage
+figure;
+plot(time_vector, all_power, 'LineWidth', 2);
+xlabel('Time (s)');
+ylabel('Power Applied (W)')
+title("Power Use During Operation")
+grid on;
 
 %% -------------------- FUNCTIONS --------------------
 function [F, V] = load_link(filename, ref_point, R_align)
