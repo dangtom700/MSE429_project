@@ -1,3 +1,11 @@
+%{
+To do list (target: force analysis)
+- Find out related variables to collect from the design
+- Derive equations for what is needed find out
+- Find out how to derive the force needed to applied on an object and pick
+and place at different locations
+%}
+
 close all; clc; clear all;
 
 %% -------------------- SETUP FIGURE --------------------
@@ -40,7 +48,7 @@ q(3) = patch('Faces', L3.F, 'Vertices', L3.V0', 'FaceColor', link_colors{3}, 'Ed
 
 %% -------------------- ANIMATION --------------------
 trace_pts = struct('L1', [], 'L2', [], 'L3', [], 'Lee', []);
-samples = create_samples([0,50,100], [150,150,100], [-150,100,100], 50, 5);
+samples = create_samples([0,50,100], [150,150,100], [-150,200,100], 50, 5);
 [num_samples, ~] = size(samples);
 disp("Generated sample points")
 disp(samples)
@@ -51,20 +59,17 @@ r = 5;  % Target sphere radius
 % Motion control parameters
 velocity = 20;       % End-effector speed [mm/s]
 dt = 0.1;            % Time step [s]
-tolerance = 5;       % Position tolerance [mm]
+tolerance = 1;       % Position tolerance [mm]
 max_joint_vel = 30;  % Maximum joint velocity [deg/s]
 lambda = 0.1;        % Damping factor for singularity handling
 singularity_threshold = 1e5;  % Condition number threshold for singularity
-reachability = 250;  % Maximum radius
-force_vec = [0, 0, -5, 0, 0, 0]; % Force vector in universal frame (N)
+reachability = 347;  % Maximum radius
 
 % Initialize data recording arrays
 all_angles = [];
 all_velocities = [];
 all_angular_vel = [];
-all_tao = [];
 all_J_error = [];
-all_power = [];
 
 for i = 1:num_samples
     % Get current target position
@@ -179,9 +184,15 @@ for i = 1:num_samples
         JP1 = cross(joint1_axis, (ee_pos - joint1_pos)');
         JP2 = cross(joint2_axis, (ee_pos - joint2_pos)');
         JP3 = cross(joint3_axis, (ee_pos - joint3_pos)');
-        J_cross = [JP1, JP2, JP3]; filler = zeros(3,3); filler(3,1) = 1;
-        J_error = sum(abs(J_cross - Jk)./(Jk + filler));
-        all_J_error = [all_J_error; J_error];
+        J_cross = [JP1, JP2, JP3];
+        
+        diff_J = J_cross - Jk;
+        norm_diff = norm(diff_J, 'fro');
+        norm_Jk = norm(Jk, 'fro');
+        norm_J_cross = norm(J_cross, 'fro');
+        denom = (norm_Jk + norm_J_cross) / 2;
+        rel_norm_error = norm_diff / (denom + eps);
+        all_J_error = [all_J_error, rel_norm_error];
 
         % Append to trace points
         trace_pts.L1 = [trace_pts.L1; joint1_pos];
@@ -202,12 +213,6 @@ for i = 1:num_samples
         draw_frame(ee, 30);
         
         drawnow;
-
-        % Calculate the power usage
-        tao = force_vec * [Jk;J_omega];
-        all_tao = [all_tao; tao];
-        power = tao * theta_dot_rad;
-        all_power = [all_power, power];
         
         % Print current status
         fprintf("Angle Configuration (deg): %.4f, %.4f, %.4f\n", current_angle);
@@ -222,9 +227,7 @@ for i = 1:num_samples
     all_angles = [all_angles; current_angle];
     all_velocities = [all_velocities; [0, 0, 0]];
     all_angular_vel = [all_angular_vel; [0,0,0]];
-    all_power = [all_power, 0];
-    all_tao = [all_tao; [0, 0, 0]];
-    all_J_error = [all_J_error; [0, 0, 0]];
+    all_J_error = [all_J_error, 0];
     
     % Skip to next sample if singularity detected
     if singularity_detected
@@ -253,7 +256,6 @@ end
 
 % Create time vector for plotting
 time_vector = (0:length(all_angles)-1)*dt;
-all_J_error(1, :) = [0,0,0];
 
 % Plot joint motion profiles
 joint_names = {'Joint 1', 'Joint 2', 'Joint 3'};
@@ -286,40 +288,24 @@ for j = 1:3
 end
 sgtitle('Joint Motion Profiles');
 
-% Plot end effector motion profiles
 figure;
-axis_name = {'alpha', 'beta', 'gamma'};
+plot(time_vector, all_J_error, 'LineWidth', 2);
+xlabel('Time (s)');
+ylabel('Relative Frobenius Error');
+title('Jacobian Discrepancy');
+grid on;
+
+figure;
+axis_name = {'\alpha', '\beta', '\gamma'};
 for i = 1:3
-    subplot(3,3,i)
+    subplot(3, 1, i);
     plot(time_vector, all_angular_vel(:, i), 'LineWidth', 2);
     title([axis_name{i} ' - Angular Velocity']);
     xlabel('Time (s)');
-    ylabel('Velocity (deg/s)');
-    grid on;
-
-    subplot(3, 3, i+3)
-    plot(time_vector, all_tao(:, i), 'LineWidth', 2);
-    title([axis_name{i} '- Angular Momentum']);
-    xlabel('Time (s)');
-    ylabel('Momentum (kg*mm^2/s)');
-    grid on;
-
-    subplot(3, 3, i+6)
-    plot(time_vector, all_J_error(:, i), 'LineWidth', 2);
-    title([axis_name{i} ' - Jacobian Error']);
-    xlabel('Time (s)');
-    ylabel('Sum Relative Error (unitless)');
+    ylabel('Angular Velocity (deg/s)');
     grid on;
 end
-sgtitle('End Effector Motion Profile')
-
-% Plot power usage
-figure;
-plot(time_vector, all_power, 'LineWidth', 2);
-xlabel('Time (s)');
-ylabel('Power Applied (W)')
-title("Power Use During Operation")
-grid on;
+sgtitle('End Effector Angular Velocity Profile');
 
 %% -------------------- FUNCTIONS --------------------
 function [F, V] = load_link(filename, ref_point, R_align)
