@@ -1,11 +1,3 @@
-%{
-To do list (target: force analysis)
-- Find out related variables to collect from the design
-- Derive equations for what is needed find out
-- Find out how to derive the force needed to applied on an object and pick
-and place at different locations
-%}
-
 close all; clc; clear all;
 
 %% -------------------- SETUP FIGURE --------------------
@@ -48,7 +40,7 @@ q(3) = patch('Faces', L3.F, 'Vertices', L3.V0', 'FaceColor', link_colors{3}, 'Ed
 
 %% -------------------- ANIMATION --------------------
 trace_pts = struct('L1', [], 'L2', [], 'L3', [], 'Lee', []);
-samples = create_samples([0,50,100], [150,150,100], [-150,200,100], 50, 5);
+samples = create_samples([0,50,100], [150,150,100], [-150,100,100], 100, 8);
 [num_samples, ~] = size(samples);
 disp("Generated sample points")
 disp(samples)
@@ -59,7 +51,7 @@ r = 5;  % Target sphere radius
 % Motion control parameters
 velocity = 20;       % End-effector speed [mm/s]
 dt = 0.1;            % Time step [s]
-tolerance = 1;       % Position tolerance [mm]
+tolerance = 5;       % Position tolerance [mm]
 max_joint_vel = 30;  % Maximum joint velocity [deg/s]
 lambda = 0.1;        % Damping factor for singularity handling
 singularity_threshold = 1e5;  % Condition number threshold for singularity
@@ -70,6 +62,8 @@ all_angles = [];
 all_velocities = [];
 all_angular_vel = [];
 all_J_error = [];
+all_location = [];
+all_linear_vel = [];
 
 for i = 1:num_samples
     % Get current target position
@@ -112,6 +106,7 @@ for i = 1:num_samples
         % Compute desired end-effector velocity
         direction = pos_error / error_norm;
         xd_dot = direction * velocity;  % Constant velocity vector
+        all_linear_vel = [all_linear_vel; xd_dot];
         
         % Compute Jacobian at current configuration
         Jk = Jacobian(current_angle(1), current_angle(2), current_angle(3));
@@ -174,6 +169,7 @@ for i = 1:num_samples
 
         ee = joint3*Tee;
         ee_pos = ee(1:3,4)';
+        all_location = [all_location; ee_pos];
 
         % Angular velocity
         J_omega = [joint1_axis, joint2_axis, joint3_axis];
@@ -227,7 +223,9 @@ for i = 1:num_samples
     all_angles = [all_angles; current_angle];
     all_velocities = [all_velocities; [0, 0, 0]];
     all_angular_vel = [all_angular_vel; [0,0,0]];
-    all_J_error = [all_J_error, 0];
+    all_J_error = [all_J_error, all_J_error(end)];
+    all_location = [all_location; all_location(end, :)];
+    all_linear_vel = [all_linear_vel; [0,0,0]];
     
     % Skip to next sample if singularity detected
     if singularity_detected
@@ -262,26 +260,23 @@ joint_names = {'Joint 1', 'Joint 2', 'Joint 3'};
 figure;
 
 for j = 1:3
-    % Angular Displacement
     subplot(3, 3, j);
     plot(time_vector, all_angles(:, j), 'LineWidth', 2);
-    title([joint_names{j} ' - Angular Displacement']);
+    title([joint_names{j} ' - Displacement']);
     xlabel('Time (s)');
     ylabel('Angle (deg)');
     grid on;
     
-    % Angular Velocity
     subplot(3, 3, j+3);
     plot(time_vector, all_velocities(:, j), 'LineWidth', 2);
-    title([joint_names{j} ' - Angular Velocity']);
+    title([joint_names{j} ' - Velocity']);
     xlabel('Time (s)');
     ylabel('Velocity (deg/s)');
     grid on;
     
-    % Angular Acceleration
     subplot(3, 3, j+6);
     plot(time_vector, acceleration(:, j), 'LineWidth', 2);
-    title([joint_names{j} ' - Angular Acceleration']);
+    title([joint_names{j} ' - Acceleration']);
     xlabel('Time (s)');
     ylabel('Acceleration (deg/s^2)');
     grid on;
@@ -298,11 +293,25 @@ grid on;
 figure;
 axis_name = {'\alpha', '\beta', '\gamma'};
 for i = 1:3
-    subplot(3, 1, i);
+    subplot(3, 3, i);
     plot(time_vector, all_angular_vel(:, i), 'LineWidth', 2);
     title([axis_name{i} ' - Angular Velocity']);
     xlabel('Time (s)');
     ylabel('Angular Velocity (deg/s)');
+    grid on;
+
+    subplot(3, 3, i+3);
+    plot(time_vector, all_linear_vel(:, i), 'LineWidth', 2);
+    title([axis_name{i} ' - Linear Velocity']);
+    xlabel('Time (s)');
+    ylabel('Linear Velocity (mm/s)');
+    grid on;
+
+    subplot(3, 3, i+6);
+    plot(time_vector, all_location(:, i), 'LineWidth', 2);
+    title([axis_name{i} ' - Spatial Position']);
+    xlabel('Time (s)');
+    ylabel('Location (mm)');
     grid on;
 end
 sgtitle('End Effector Angular Velocity Profile');
