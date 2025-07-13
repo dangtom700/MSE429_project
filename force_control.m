@@ -1,28 +1,28 @@
 clc; clear all; close all;
 
 %% -------------------- DYNAMIC PROPERTIES (SI UNITS) --------------------
-g = 9.81; % m/s²
+g = 9.81; % m/s^2
 
 % Link 1 (Base Link)
 Link1.mass = 0.21025; % kg
 Link1.com = [0.00512, 0.00097, 0.05928]; % m
 Link1.inertia_com = [371584.58,  1133.32,   37190.55;
                      1133.32,   390041.76,  8369.32;
-                     37190.55,   8369.32,   129419.43] * 1e-9; % kg·m²
+                     37190.55,   8369.32,   129419.43] * 1e-9; % kg·m^2
 
 % Link 2 (Middle Link)
 Link2.mass = 0.11181; % kg
 Link2.com = [0.00138, 0.10492, 0.00001]; % m
 Link2.inertia_com = [230119.67, -26620.50,  85.99;
                     -26620.50,   53290.16,  76.49;
-                     85.99,      76.49,     250996.49] * 1e-9; % kg·m²
+                     85.99,      76.49,     250996.49] * 1e-9; % kg·m^2
 
 % Link 3 (End-Effector Link)
 Link3.mass = 0.03816; % kg
 Link3.com = [0.01352, 0.06237, 0.00001]; % m
 Link3.inertia_com = [67677.77, -487.23,  1.61;
                     -487.23,   3902,     9.04;
-                     1.61,     9.04,     65335.24] * 1e-9; % kg·m²
+                     1.61,     9.04,     65335.24] * 1e-9; % kg·m^2
 
 % Test tube properties
 test_tube.mass = 0.00668; % kg
@@ -316,7 +316,7 @@ for i = 1:num_samples
     all_velocities = [all_velocities; [0, 0, 0]];
     all_angular_vel = [all_angular_vel; [0,0,0]];
     all_J_error = [all_J_error, all_J_error(end)];
-    all_location = [all_location; all_location(end, :)];
+    all_location = [all_location; target_pos];
     all_linear_vel = [all_linear_vel; [0,0,0]];
     
     % Skip to next sample if singularity detected
