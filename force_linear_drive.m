@@ -37,7 +37,7 @@ figure('Renderer', 'zbuffer');
 axis equal; axis vis3d; grid on; hold on;
 xlabel('X'); ylabel('Y'); zlabel('Z');
 view(3); rotate3d on;
-axis([-300 300 -300 300 -50 350]);
+axis([-300 300 -300 300 -50 200]);
 title("Dynamic Path Planning with Joint Torque Analysis")
 
 % Lighting setup
@@ -81,19 +81,20 @@ current_angle = [270,-66,156]; % Initial joint angles [deg]
 r = 5;  % Target sphere radius
 
 % Motion control parameters
-velocity = 20;       % mm/s
+velocity = 30;       % mm/s
 dt = 0.1;            % Time step [s]
 tolerance = 5;       % Position tolerance [mm]
-max_joint_vel = 10;  % Maximum joint velocity [deg/s]
+max_joint_vel = 20;  % Maximum joint velocity [deg/s]
 lambda = 0.1;        % Damping factor for singularity handling
 singularity_threshold = 1e5;  % Condition number threshold for singularity
 reachability = 347;  % Maximum radius [mm]
 
 % Force application parameters
 pickup_index = 3;          % When to pick up object
-place_index = num_samples - 3; % When to place object
-pickup_force = [0, 0, 1];  % N (upward during pickup)
+place_index = num_samples - 2; % When to place object
+pickup_force = [0, 0, 0.2];  % N (upward during pickup)
 place_force = [0, 0, -0.2];% N (downward during placement)
+hold_force = -test_tube.com * test_tube.mass; % N (upward during hold)
 
 % Initialize data recording arrays
 all_angles = [];
@@ -107,6 +108,7 @@ all_gravity_torques = [];
 all_ext_torques = [];
 current_load = 0;          % Track if carrying object
 applied_force = [0, 0, 0]; % Current external force
+steps = zeros(1, num_samples);
 
 %% -------------------- ANIMATION & DYNAMICS LOOP --------------------
 for i = 1:num_samples
@@ -139,11 +141,15 @@ for i = 1:num_samples
     if i == pickup_index
         current_load = test_tube.mass;
         applied_force = pickup_force;
-        fprintf("---- PICKUP EVENT: Applying +1N Z-force ----\n");
+        fprintf("---- PICKUP EVENT: Applying +Z-force ----\n");
+    elseif i > pickup_index && i < place_index
+        current_load = test_tube.mass;
+        applied_force = hold_force;
+        fprintf("---- HOLDING EVENT: Applying +Z-force ----\n");
     elseif i == place_index
         current_load = 0;
         applied_force = place_force;
-        fprintf("---- PLACEMENT EVENT: Applying -0.2N Z-force ----\n");
+        fprintf("---- PLACEMENT EVENT: Applying -Z-force ----\n");
     else
         applied_force = [0, 0, 0];
     end
@@ -175,8 +181,6 @@ for i = 1:num_samples
             singularity_detected = true;
             break;
         end
-        
-        fprintf("--------------\nStep %d: cond(J) = %.2f, Error: %.2f mm\n", step, condJ, error_norm);
         
         % Compute joint velocities using damped least squares
         J_pinv = Jk' / (Jk*Jk' + lambda^2*eye(3));
@@ -254,20 +258,45 @@ for i = 1:num_samples
         % Compute torque due to external force
         ext_torque = J_ee_m' * applied_force';
         
-        % Compute gravity compensation torque
+        % Compute gravity compensation torque using exact CoM Jacobians
         gravity_torque = zeros(3,1);
-        for link_idx = 1:robot.num_links
-            % Gravity force vector for this link
-            gravity_force = [0; 0; -robot.links{link_idx}.mass * g];
-            
-            % Simplified COM Jacobian (approximation)
-            J_com = compute_com_jacobian(theta_rad, link_idx);
-            
-            % Add to total gravity torque
-            gravity_torque = gravity_torque + J_com' * gravity_force;
-        end
         
-        % Add torque due to test tube if carried
+        % Calculate CoM positions in base frame
+        % Link 1 CoM (in base frame)
+        com1_base = T1(1:3,1:3) * Link1.com' * 1000;  % Convert m to mm
+        J_com1 = compute_com_jacobian_geometric(...
+            [joint1_pos; joint2_pos; joint3_pos],...
+            J_omega,...
+            com1_base...
+        ) / 1000;  % Convert mm to m
+        
+        % Link 2 CoM (in base frame)
+        com2_base = joint2(1:3,1:3) * Link2.com' * 1000 + joint2(1:3,4);
+        J_com2 = compute_com_jacobian_geometric(...
+            [joint1_pos; joint2_pos; joint3_pos],...
+            J_omega,...
+            com2_base...
+        ) / 1000;  % Convert mm to m
+        
+        % Link 3 CoM (in base frame)
+        com3_base = joint3(1:3,1:3) * Link3.com' * 1000 + joint3(1:3,4);
+        J_com3 = compute_com_jacobian_geometric(...
+            [joint1_pos; joint2_pos; joint3_pos],...
+            J_omega,...
+            com3_base...
+        ) / 1000;  % Convert mm to m
+        
+        % Calculate gravity torque for each link
+        gravity_force1 = [0; 0; -Link1.mass * g];
+        gravity_force2 = [0; 0; -Link2.mass * g];
+        gravity_force3 = [0; 0; -Link3.mass * g];
+        
+        gravity_torque = gravity_torque + ...
+            J_com1' * gravity_force1 + ...
+            J_com2' * gravity_force2 + ...
+            J_com3' * gravity_force3;
+        
+        % Add torque due to test tube if carried (at end-effector)
         if current_load > 0
             tube_gravity_force = [0; 0; -current_load * g];
             gravity_torque = gravity_torque + J_ee_m' * tube_gravity_force;
@@ -301,23 +330,12 @@ for i = 1:num_samples
         draw_frame(ee, 30);
         
         drawnow;
-        
-        % Print current status
-        fprintf("Angle Configuration (deg): %.4f, %.4f, %.4f\n", current_angle);
-        fprintf("Location (mm): %.4f, %.4f, %.4f\n", ee_pos);
-        disp("Geometric (cross product) Jacobian matrix")
-        disp(J_cross);
-        disp("Analytical (derivative) Jacobian matrix")
-        disp(Jk)
     end
     
-    % Record final state for this target
-    all_angles = [all_angles; current_angle];
-    all_velocities = [all_velocities; [0, 0, 0]];
-    all_angular_vel = [all_angular_vel; [0,0,0]];
-    all_J_error = [all_J_error, all_J_error(end)];
-    all_location = [all_location; target_pos];
-    all_linear_vel = [all_linear_vel; [0,0,0]];
+    steps(i) = step;
+    fprintf("Step to final destnation %d\n", step);
+    fprintf("Final angle Configuration (deg): %.4f, %.4f, %.4f\n", current_angle);
+    fprintf("Final location (mm): %.4f, %.4f, %.4f\n", ee_pos);
     
     % Skip to next sample if singularity detected
     if singularity_detected
@@ -409,44 +427,42 @@ end
 sgtitle('End Effector Motion Profile');
 
 %% -------------------- PLOT TORQUE ANALYSIS --------------------
-time_vector_torque = (0:size(all_torques,1)-1)*dt;
-
 % Plot total joint torques
 figure;
-subplot(3,1,1);
-plot(time_vector_torque, all_torques(:,1), 'LineWidth', 2);
-title('Joint 1 Torque');
-ylabel('Torque (N·m)');
-grid on;
-
-subplot(3,1,2);
-plot(time_vector_torque, all_torques(:,2), 'LineWidth', 2);
-title('Joint 2 Torque');
-ylabel('Torque (N·m)');
-grid on;
-
-subplot(3,1,3);
-plot(time_vector_torque, all_torques(:,3), 'LineWidth', 2);
-title('Joint 3 Torque');
-xlabel('Time (s)');
-ylabel('Torque (N·m)');
-grid on;
+for i = 1:3
+    subplot(3,1,i);
+    plot(time_vector, all_torques(:,i), 'LineWidth', 2);
+    title([joint_names{i} ' Torque']);
+    ylabel('Torque (N·m)');
+    grid on;
+end
 sgtitle('Joint Torques During Motion');
 
 % Plot torque components for each joint
-joint_names = {'Joint 1', 'Joint 2', 'Joint 3'};
 for joint = 1:3
     figure;
     hold on;
-    plot(time_vector_torque, all_gravity_torques(:,joint), 'b-', 'LineWidth', 1.5);
-    plot(time_vector_torque, all_ext_torques(:,joint), 'r-', 'LineWidth', 1.5);
-    plot(time_vector_torque, all_torques(:,joint), 'k--', 'LineWidth', 2);
+    
+    % Create plots with distinct styles
+    h1 = plot(time_vector, all_gravity_torques(:,joint), 'b-', 'LineWidth', 1.5);
+    h2 = plot(time_vector, all_ext_torques(:,joint), 'r-', 'LineWidth', 1.5);
+    h3 = plot(time_vector, all_torques(:,joint), 'k--', 'LineWidth', 2);
+    
+    % Mark pickup and placement events
+    xline(sum(steps(1: pickup_index-1))*dt, 'g--', 'Pickup', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+    xline(sum(steps(1: place_index -1))*dt, 'm--', 'Placement', 'LineWidth', 1.5, 'HandleVisibility', 'off');
     
     xlabel('Time (s)');
     ylabel('Torque (N·m)');
     title([joint_names{joint} ' Torque Components']);
-    legend('Gravity', 'External Forces', 'Total');
+    
+    % Create legend with clear labels
+    legend([h1, h2, h3], ...
+        {'Gravity Compensation', 'External Forces', 'Total Torque'}, ...
+        'Location', 'best');
+    
     grid on;
+    box on;
     hold off;
 end
 
@@ -614,23 +630,18 @@ function J = Jacobian(theta1_deg, theta2_deg, theta3_deg)
            0,                E,    F ];
 end
 
-function J_com = compute_com_jacobian(theta_rad, link_idx)
-    % Simplified COM Jacobian calculation based on joint configuration
-    % For accurate industrial use, replace with full geometric Jacobian
-    switch link_idx
-        case 1  % Base link
-            J_com = [0, 0, 0;
-                     0, 0, 0;
-                     0, 0, 0];
-            
-        case 2  % Middle link
-            J_com = [-0.1*sin(theta_rad(1)), 0, 0;
-                      0.1*cos(theta_rad(1)), 0, 0;
-                      0, 0, 0];
-            
-        case 3  % End-effector link
-            J_com = [-0.25*sin(theta_rad(1)), -0.15*sin(theta_rad(1)), -0.1*sin(theta_rad(1));
-                      0.25*cos(theta_rad(1)),  0.15*cos(theta_rad(1)),  0.1*cos(theta_rad(1));
-                      0, 0, 0];
+function Jv = compute_com_jacobian_geometric(joint_positions, joint_axes, com_position)
+    % joint_positions: 3x3 matrix [j1_pos; j2_pos; j3_pos] (in mm)
+    % joint_axes: 3x3 matrix [j1_axis; j2_axis; j3_axis]
+    % com_position: 3x1 vector (in mm)
+    
+    Jv = zeros(3, 3);
+    
+    for j = 1:3
+        % For each joint, compute the vector from joint to CoM
+        r = com_position - joint_positions(j,:)';
+        
+        % Compute Jacobian column: ω × r for revolute joints
+        Jv(:, j) = cross(joint_axes(:,j), r);
     end
 end
