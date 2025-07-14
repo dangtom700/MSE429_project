@@ -90,11 +90,12 @@ singularity_threshold = 1e5;  % Condition number threshold for singularity
 reachability = 347;  % Maximum radius [mm]
 
 % Force application parameters
-pickup_index = 3;          % When to pick up object
+pickup_index = 4;          % When to pick up object
 place_index = num_samples - 2; % When to place object
-pickup_force = [0, 0, 0.2];  % N (upward during pickup)
-place_force = [0, 0, -0.2];% N (downward during placement)
-hold_force = -test_tube.com * test_tube.mass; % N (upward during hold)
+force_vector = -test_tube.com * test_tube.mass;
+pickup_force = force_vector * 1.5;  % N (upward during pickup)
+place_force = force_vector * 0.7;% N (downward during placement)
+hold_force = force_vector; % N (upward during hold)
 
 % Initialize data recording arrays
 all_angles = [];

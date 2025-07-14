@@ -90,11 +90,12 @@ current_angle = [270,-66,156];  % degrees
 current_time = 0;         % Current simulation time
 
 % Force application parameters
-pickup_index = 3;          % When to pick up object
+pickup_index = 4;          % When to pick up object
 place_index = num_samples - 2; % When to place object
-pickup_force = [0, 0, 0.2];  % N (upward during pickup)
-place_force = [0, 0, -0.2];% N (downward during placement)
-hold_force = -test_tube.com * test_tube.mass; % N (upward during hold)
+force_vector = -test_tube.com * test_tube.mass;
+pickup_force = force_vector * 1.5;  % N (upward during pickup)
+place_force = force_vector * 0.7;% N (downward during placement)
+hold_force = force_vector; % N (upward during hold)
 
 % Initialize data recording arrays
 all_times = zeros(steps*num_samples, 3);          % Put time stamp
@@ -273,17 +274,17 @@ for i = 1:num_samples
         trace_pts.L3 = [trace_pts.L3; joint3_pos];
         trace_pts.Lee = [trace_pts.Lee; jointee_pos];
 
-        % Draw traces
-        plot3(trace_pts.L1(:,1), trace_pts.L1(:,2), trace_pts.L1(:,3), 'r.', 'MarkerSize', 1);
-        plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
-        plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
+        % % Draw traces
+        % plot3(trace_pts.L1(:,1), trace_pts.L1(:,2), trace_pts.L1(:,3), 'r.', 'MarkerSize', 1);
+        % plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
+        % plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
         plot3(trace_pts.Lee(:,1), trace_pts.Lee(:,2), trace_pts.Lee(:,3), 'b.', 'MarkerSize', 1);
-        
-        % Draw coordinate frames
-        draw_frame(T1, 30);
-        draw_frame(joint2, 30);
-        draw_frame(joint3, 30);
-        draw_frame(jointee, 30);
+        % 
+        % % Draw coordinate frames
+        % draw_frame(T1, 30);
+        % draw_frame(joint2, 30);
+        % draw_frame(joint3, 30);
+        % draw_frame(jointee, 30);
         
         drawnow;
 
