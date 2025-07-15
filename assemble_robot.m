@@ -1,3 +1,8 @@
+%{
+Define the initial posture of the system for easier dynamics data
+integration for force analysis
+%}
+
 close all; clear all; clc;
 
 %% Initialize figure and settings
@@ -16,22 +21,22 @@ link_colors = {[0.6 0.6 0.4], [0.4 0.6 0.8], [0.8 0.4 0.6]}; % Colors for each l
 %% Load Link 1 (Base)
 [obj1, V1] = loadSTLComponent('Link1.STL', ...
                              [97.9527, 34.4903, 134.099], ... % Ref point
-                             [0, 0, 0], ...                   % Target position (origin)
-                             eye(3), ...                       % No rotation
+                             [0,0,0], ...                   
+                             [0,1,0; -1,0,0; 0,0,1], ...                       
                              link_colors{1}, 1);
 
 %% Load Link 2 (Arm)
 [obj2, V2] = loadSTLComponent('Link2.STL', ...
                              [157.325, 42.4651, 173.659], ... % Ref point
-                             [1.3, 40, 95], ... % Target position
-                             [1 0 0; 0 0 -1; 0 1 0], ...      % 90° X rotation
+                             [40,-1.3,95], ... 
+                             [0,0,-1; -1,0,0; 0,1,0], ...      
                              link_colors{2}, 2);
 
 %% Load Link 3 (Forearm)
 [obj3, V3] = loadSTLComponent('Link3.STL', ...
                              [127.04, 113.902, 187.562], ... % Ref point
-                             [-132, 12.5,95.5], ... % Target position
-                             [1 0 0; 0 0 -1; 0 1 0], ...      % 90° X rotation
+                             [12.5, 132, 95.5], ... 
+                             [0,0,-1; -1,0,0; 0,1,0], ...      
                              link_colors{3}, 3);
 
 %% Verify positions
