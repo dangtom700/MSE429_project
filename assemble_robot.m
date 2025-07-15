@@ -1,6 +1,11 @@
 %{
 Define the initial posture of the system for easier dynamics data
-integration for force analysis
+integration for force analysis.
+Procedure
+1) link 1 rotates around z axis
+2) link 2 rotates around y axis
+3) link 3 rotates around y axis
+4) the system is rotate 90 degree around z axis
 %}
 
 close all; clear all; clc;
