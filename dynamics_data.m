@@ -1,87 +1,160 @@
-%% -------------------- DYNAMIC PROPERTIES --------------------
-% Link 1 (Base Link)
-Link1.mass = 0.21025; % kg
-Link1.volume = 0.00021025094; % m^3
-Link1.surface_area = 0.12912587; % m^2
-Link1.com = [0.00512, 0.00097, 0.05928]; % m
+%{
+Dynamics properties of this robot arm
+- Material: PE (only applied for the costumed-made components - links) 
+- Purpose: resilient material against chemical and toxic environment, 
+reasonable price per kg, light weight system design, acceptable mechanical
+properties, such as Young's module, maximum tensile strength, fatigue
+toughness, fracture strength.
+- Unit: measurements conducted is in millimeters for length and grams for
+mass. Mass (grams), volume (cubic millimeters), surface area (square
+millimeters), center of mass (millimeters), moment of inertia (grams *
+square millimeters)
+- Abbreviation: com (center of mass), PAI (principal axes of inertia), PMI
+(principal moments of inertia), MICOM (moments of inertia at center of
+mass), MICS (moments of inertia at output coordinate system)
+%}
 
-% Principal axes remain the same (unitless rotation matrix)
-Link1.principal_axes = [0.15,  0.03,  0.99;
-                       -0.99,  0.01,  0.15;
-                        0,    -1,     0.03];
+%% ------------ WHOLE SYSTEM ------------
+whole_sys.mass = 349.97;
+whole_sys.volume = 360215.03;
+whole_sys.surface_area = 213462.11;
+whole_sys.PAI = [-0.10, -0.96, -0.26; % Ix
+                 -0.37, 0.27, -0.89;  % Iy
+                 0.92, 0.01, -0.39];  % Iz
+whole_sys.PMI = [529673.31, 2143094.30, 2357570.25];
 
-% Principal moments of inertia [kg·m^2]
-Link1.principal_moments = [123568.96; 377166.30; 390310.51] * 1e-9;
+% Coordinate 1
+whole_sys.com_1 = [15.13, 53.88, 75.09];
+whole_sys.MICOM_1 = [2310698.96, 146823.19, 116301.73;
+                     146823.19, 651705.71, 400612.34;
+                     116301.73, 400612.34, 2067933.18];
+whole_sys.MICS_1 = [5299980.18, 432153.32, 513953.57;
+                    432153.32, 2705143.91, 1816532.83;
+                    513953.57, 1816532.83, 3164042.34];
 
-% Inertia tensor at CoM [kg·m^2]
-Link1.inertia_com = [371584.58,  1133.32,   37190.55;
-                     1133.32,   390041.76,  8369.32;
-                     37190.55,   8369.32,   129419.43] * 1e-9;
+% Coordinate 2
+whole_sys.com_2 = [-35.40, 53.86, -22.21];
+whole_sys.MICOM_2 = [2310857.77, 145623.11, 116084.38;
+                     145923.11, 651546.90, 400675.38;
+                     116084.38, 400675.38, 2067933.18];
+whole_sys.MICS_2 = [3498787.26, -521351.91, 116084.38;
+                    -521351.91, 1262790.94, -18026.11;
+                    391276.13, -18026.11, 3521752.27];
 
-% Inertia tensor at joint frame [kg·m^2]
-Link1.inertia_joint = [1110631.36,  2180.71,    101000.38;
-                       2180.71,    1134400.35,  20496.89;
-                       101000.38,   20496.89,   135129.36] * 1e-9;
+% Coordinate 3
+whole_sys.com_3 = [16.17, -75.81, -22.21];
+whole_sys.MICOM_3 = [2310857.77, 145923.11, 116084.38;
+                     145923.11, 651546.90, 400675.38;
+                     116084.38, 400675.38, 400675.38;
+                     116084.38, 400675.38, 2067933.18];
+whole_sys.MICS_3 = [4494802.86, -283095.78, -9622.48;
+                    -283095.78, 915737.14, 989997.14;
+                    -9622.48, 989997.14, 4170714.08];
 
-% ------------------------------------------------------------------------
-% Link 2 (Middle Link)
-Link2.mass = 0.11181; % kg
-Link2.volume = 0.00011180654; % m^3
-Link2.surface_area = 0.06482837; % m^2
-Link2.com = [0.00138, 0.10492, 0.00001]; % m
+%% ------------ LINK 1 (BASE) ------------
+whole_sys.mass = 204.72;
+whole_sys.volume = 210250.93;
+whole_sys.surface_area = 129125.87;
+whole_sys.PAI = [0.16, -0.01, 0.99; % Ix
+                 -0.99, 0.01, 0.16;  % Iy
+                 -0.01, -1.00, -0.01];  % Iz
+whole_sys.PMI = [119720.15, 364493.75, 383151.27];
 
-Link2.principal_axes = [0.15,  -0.99,  0;
-                        0.99,  0.15,   0.01;
-                       -0.01,  0,      1];
+% Coordinate 1
+whole_sys.com_1 = [4.90, 1.77, 59.45];
+whole_sys.MICOM_1 = [358222.61, -396.84, 38675.05;
+                     -396.84, 383138.34, -1757369;
+                     38675.05, -1757.69, 126004.21];
+whole_sys.MICS_1 = [1082296.13, 1379.86, 98267.34;
+                    1379.86, 1111477.70, 19810.83;
+                    98267.34, 19810.83, 126004.15];
 
-Link2.principal_moments = [49369.53; 234039.74; 250997.05] * 1e-9;
+% Coordinate 2
+whole_sys.com_2 = [-45.61, 1.75, -37.86];
+whole_sys.MICOM_2 = [358222.19, -383.32, 38676.00;
+                     -383.32, 383138.76, -1736.71;
+                     38676.00, -1736.71, 126004.21];
+whole_sys.MICS_2 = [652250.05, -16699.79, 392137.10;
+                    -16699.79, 1102354.73, -15280.75;
+                    392137.10, -15280.75, 552442.76];
 
-Link2.inertia_com = [230119.67, -26620.50,  85.99;
-                    -26620.50,   53290.16,  76.49;
-                     85.99,      76.49,     250996.49] * 1e-9;
+% Coordinate 3
+whole_sys.com_3 = [5.96, -127.92, -37.86];
+whole_sys.MICOM_3 = [358222.19, -383.32, 38676.00;
+                     -383.32, 383138.76, -1736.71;
+                     38676.00, -1736.71, 126004.21];
+whole_sys.MICS_3 = [4001678.94, -156566.32, -7545.06;
+                    -156566.32, 683822.82, 989683.85;
+                    -7545.06, 989683.85, 3483339.74];
 
-Link2.inertia_joint = [1460976.05, -10443.01,  88.16;
-                      -10443.01,    53502.81,  241.58;
-                       88.16,      241.58,    1482065.47] * 1e-9;
+%% ------------ LINK 2 (MID LINK) ------------
+whole_sys.mass = 108.74;
+whole_sys.volume = 111806.54;
+whole_sys.surface_area = 64828.37;
+whole_sys.PAI = [0.15, -0.99, 0.00; % Ix
+                 0.99, 0.15, -0.07;  % Iy
+                 0.07, 0.01, 1.00];  % Iz
+whole_sys.PMI = [48797.36, 224964.61, 242225.00];
 
-% ------------------------------------------------------------------------
-% Link 3 (End-Effector Link)
-Link3.mass = 0.03816; % kg
-Link3.volume = 0.00003815756; % m^3
-Link3.surface_area = 0.01950787; % m^2
-Link3.com = [0.01352, 0.06237, 0.00001]; % m
+% Coordinate 1
+whole_sys.com_1 = [39.15, 105.49, 97.09];
+whole_sys.MICOM_1 = [221203.36, -25729.69, -1140.25;
+                     -25729.69, 52637.13, -228.09;
+                     -1140.25, -228.09, 242146.48];
+whole_sys.MICS_1 = [2456327.37, 423355.05, 412169.58;
+                    423355.05, 1244297.47, 1113494.27;
+                    412169.58, 1113494.27, 1618926.56];
 
-Link3.principal_axes = [0.01, -1,     0;
-                        0,     0,    -1;
-                        1,     0.01,  0];
+% Coordinate 2
+whole_sys.com_2 = [-11.41, 105.48, -0.21];
+whole_sys.MICOM_2 = [221175.40, -25820.72, -1140.13;
+                     -25820.72, 52665.09, -228.71;
+                     -1140.13, -228.71, 242146.48];
+whole_sys.MICS_2 = [1431160.62, -156714.28, -873.47;
+                    -156714.28, 66829.95, -2693.72;
+                    -873.47, -2693.72, 242146.48];
 
-Link3.principal_moments = [3898.27; 65335.24; 67681.49] * 1e-9;
+% Coordinate 3
+whole_sys.com_3 = [40.16, -24.18, -0.21];
+whole_sys.MICOM_3 = [221175.40, -25820.72, -1140.13;
+                     -25820.72, 52665.09, -228.71;
+                     -1140.13, -228.71, 242146.48];
+whole_sys.MICS_3 = [284781.21, -131433.29, -2078.58;
+                    -131433.29, 228045.52, 336.44;
+                    -2078.58, 336.44, 481122.67];
 
-Link3.inertia_com = [67677.77, -487.23,  1.61;
-                    -487.23,   3902,     9.04;
-                     1.61,     9.04,     65335.24] * 1e-9;
+%% ------------ LINK 3 (END EFFECTOR) ------------
+whole_sys.mass = 36.51;
+whole_sys.volume = 38157.56;
+whole_sys.surface_area = 19507.87;
+whole_sys.PAI = [-0.01, -1.00, 0.00; % Ix
+                 0.00, 0.00, -1.00;  % Iy
+                 1.00, -0.01, 0.00];  % Iz
+whole_sys.PMI = [3726.42, 62803.60, 65037.03];
 
-Link3.inertia_joint = [216094.85, 31676.03,  4.52;
-                       31676.03,  10872.06,  22.50;
-                       4.52,      22.50,     220722.38] * 1e-9;
+% Coordinate 1
+whole_sys.com_1 = [0.99, 192.35, 97.30];
+whole_sys.MICOM_1 = [65033.44, 469.32, 1.59;
+                     469.32, 3730.02, -9.38;
+                     1.59, -9.38, 62803.60];
+whole_sys.MICS_1 = [1761356.68, 7418.41, 3516.66;
+                    7418.41, 349368.75, 683227.73;
+                    3516.66, -9.38, 62803.60];
 
-% ------------------------------------------------------------------------
-% Object
-test_tube.mass = 0.00668; % kg
-test_tube.volume = 0.00000735866; % m^3
-test_tube.surface_area = 0.00751469; % m^2
-test_tube.com = [0, 0, -0.04123]; % m
+% Coordinate 2
+whole_sys.com_2 = [-49.62, 192.32, -0.01];
+whole_sys.MICOM_2 = [65033.93, 436.06, 1.59;
+                     436.06, 3729.52, -9.38;
+                     1.59, -9.38, 62803.60];
+whole_sys.MICS_2 = [1415376.59, -347937.85, 12.50;
+                    -347937.85, 93606.25, -51.64;
+                    12.50, -51.64, 1503022.99];
 
-test_tube.principal_axes = [0, 0, 1;
-                            -1, 0, 0;
-                             0, -1, 0];
-
-test_tube.principal_moments = [326.04, 4057.51, 4057.51] * 1e-9;
-
-test_tube.inertia_com = [4057.51, 0, 0;
-                         0, 4057.51, 0;
-                         0, 0, 326.04] * 1e-9;
-
-test_tube.inertia_joint = [15414.68, 0, 0;
-                           0, 15414.68, 0;
-                           0, 0, 326.04] * 1e-9;
+% Coordinate 3
+whole_sys.com_3 = [1.95, 62.65, -0.01];
+whole_sys.MICOM_3 = [65033.93, 436.06, 1.59;
+                     436.06, 3729.52, -9.38;
+                     1.59, -9.38, 62803.60];
+whole_sys.MICS_3 = [208342.71, 4903.82, 1.16;
+                    4903.82, 3868.81, -23.14;
+                    1.16, -23.14, 206251.67];
