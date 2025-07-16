@@ -74,6 +74,7 @@ r = 5;
 steps = 20;
 dt = 0.1;            % Time step [s]
 safety_margin = 5;  % degrees from constraint boundary
+max_angular_vel = 20; % degrees/s
 angle_constaints = [-300 -120 -250; 300 120 250];
 constraints = deg2rad(angle_constaints);
 position_tolerance = 1;  % 1 mm position tolerance
@@ -196,17 +197,16 @@ for i = 1:num_samples
     end
     
     % ========== VELOCITY CONTROL ========== %
-    delta_angle = wrapTo180(best_solution - current_angle);
+    delta_angle = wrapTo180(best_solution - current_angle)./steps;
     theta = zeros(3, steps);
-    
+
     for s = 1:steps
-        progress = s / steps;
-        target_angles = current_angle + delta_angle * progress;
-        
+        target_angles = current_angle + delta_angle * s;
+
         for joint = 1:3
             dist_lower = target_angles(joint) - angle_constaints(1, joint);
             dist_upper = angle_constaints(2, joint) - target_angles(joint);
-            
+
             if dist_lower < safety_margin
                 reduction = (dist_lower / safety_margin)^2;
                 target_angles(joint) = current_angle(joint) + ...
@@ -217,7 +217,7 @@ for i = 1:num_samples
                     delta_angle(joint) * progress * reduction;
             end
         end
-        
+
         theta(:, s) = deg2rad(target_angles);
     end
     
