@@ -84,8 +84,8 @@ current_time = 0;         % Current simulation time
 pickup_index = 4;          % When to pick up object
 place_index = num_samples - 2; % When to place object
 force_vector = -test_tube.com * test_tube.mass;
-pickup_force = force_vector * 1.5;  % N (upward during pickup)
-place_force = -force_vector * 0.7;% N (downward during placement)
+pickup_force = force_vector * 1.7;  % N (upward during pickup)
+place_force = force_vector * 0.7;% N (downward during placement)
 hold_force = force_vector; % N (upward during hold)
 
 % Initialize data recording arrays
@@ -309,10 +309,13 @@ for i = 1:num_samples
         com3_base = joint3(1:3, 1:3) * Link3.com_3';
         com3_base = com3_base(1:3)';
         
+        position_bundle = [joint1_pos; joint2_pos; joint3_pos]./1000;
+        axis_bundle = [z1, z2, z3];
+        
         % Compute CoM Jacobians
-        J_com1 = compute_com_jacobian([joint1_pos; joint2_pos; joint3_pos]./1000, [z1, z2, z3], com1_base);
-        J_com2 = compute_com_jacobian([joint1_pos; joint2_pos; joint3_pos]./1000, [z1, z2, z3], com2_base);
-        J_com3 = compute_com_jacobian([joint1_pos; joint2_pos; joint3_pos]./1000, [z1, z2, z3], com3_base);
+        J_com1 = compute_com_jacobian(position_bundle, axis_bundle, com1_base);
+        J_com2 = compute_com_jacobian(position_bundle, axis_bundle, com2_base);
+        J_com3 = compute_com_jacobian(position_bundle, axis_bundle, com3_base);
         
         % Gravity torque calculation
         g_vec = [0; 0; -g];
@@ -323,9 +326,9 @@ for i = 1:num_samples
         
         % Test tube handling
         if current_load > 0
-            tube_com_base = (jointee * [test_tube.com'; 1]);
+            tube_com_base = jointee(1:3, 1:3) * test_tube.com';
             tube_com_base = tube_com_base(1:3)';
-            J_tube = compute_com_jacobian([joint1_pos; joint2_pos; joint3_pos], [z1, z2, z3], tube_com_base);
+            J_tube = compute_com_jacobian(position_bundle, axis_bundle, tube_com_base);
             gravity_torque = gravity_torque + J_tube' * (current_load * g_vec);
         end
         

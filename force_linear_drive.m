@@ -1,32 +1,23 @@
-clc; clear all; close all;
+close all; clc; clear all;
 
 %% -------------------- DYNAMIC PROPERTIES (SI UNITS) --------------------
 g = 9.81; % m/s^2
 
 % Link 1 (Base Link)
-Link1.mass = 0.21025; % kg
-Link1.com = [0.00512, 0.00097, 0.05928]; % m
-Link1.inertia_com = [371584.58,  1133.32,   37190.55;
-                     1133.32,   390041.76,  8369.32;
-                     37190.55,   8369.32,   129419.43] * 1e-9; % kg·m^2
+Link1.mass = 204.72 * 1e-3; % kg
+Link1.com_1 = [1.77, -4.90, 59.45] * 1e-3; % m
 
 % Link 2 (Middle Link)
-Link2.mass = 0.11181; % kg
-Link2.com = [0.00138, 0.10492, 0.00001]; % m
-Link2.inertia_com = [230119.67, -26620.50,  85.99;
-                    -26620.50,   53290.16,  76.49;
-                     85.99,      76.49,     250996.49] * 1e-9; % kg·m^2
+Link2.mass = 108.74 * 1e-3; % kg
+Link2.com_2 = [105.48, 11.41, -0.21] * 1e-3; % m
 
 % Link 3 (End-Effector Link)
-Link3.mass = 0.03816; % kg
-Link3.com = [0.01352, 0.06237, 0.00001]; % m
-Link3.inertia_com = [67677.77, -487.23,  1.61;
-                    -487.23,   3902,     9.04;
-                     1.61,     9.04,     65335.24] * 1e-9; % kg·m^2
+Link3.mass = 36.51 * 1e-3; % kg
+Link3.com_3 = [62.65, -1.95, -0.01] * 1e-3; % m
 
 % Test tube properties
-test_tube.mass = 0.00668; % kg
-test_tube.com = [0, 0, -0.04123]; % m
+test_tube.mass = 0.000688; % kg
+test_tube.com = [0, 0, -0.04165]; % m (relative to end-effector)
 
 % Store all links
 robot.links = {Link1, Link2, Link3};
@@ -93,7 +84,7 @@ reachability = 347;  % Maximum radius [mm]
 pickup_index = 4;          % When to pick up object
 place_index = num_samples - 2; % When to place object
 force_vector = -test_tube.com * test_tube.mass;
-pickup_force = force_vector * 1.5;  % N (upward during pickup)
+pickup_force = force_vector * 1.7;  % N (upward during pickup)
 place_force = force_vector * 0.7;% N (downward during placement)
 hold_force = force_vector; % N (upward during hold)
 
@@ -253,57 +244,43 @@ for i = 1:num_samples
         all_J_error = [all_J_error, rel_norm_error];
 
         % ==================== DYNAMICS ANALYSIS ====================
-        % Convert Jacobian to meters (from mm to m)
-        J_ee_m = Jk / 1000;
+        % Transform CoMs to base frame (in meters)
+        com1_base = joint1(1:3, 1:3) * Link1.com_1'; 
+        com1_base = com1_base(1:3)';
         
-        % Compute torque due to external force
-        ext_torque = J_ee_m' * applied_force';
+        com2_base = joint2(1:3, 1:3) * Link2.com_2';
+        com2_base = com2_base(1:3)';
         
-        % Compute gravity compensation torque using exact CoM Jacobians
-        gravity_torque = zeros(3,1);
+        com3_base = joint3(1:3, 1:3) * Link3.com_3';
+        com3_base = com3_base(1:3)';
+
+        position_bundle = [joint1_pos; joint2_pos; joint3_pos]./1000;
+        axis_bundle = [joint1_axis, joint2_axis, joint3_axis];
         
-        % Calculate CoM positions in base frame
-        % Link 1 CoM (in base frame)
-        com1_base = T1(1:3,1:3) * Link1.com' * 1000;  % Convert m to mm
-        J_com1 = compute_com_jacobian_geometric(...
-            [joint1_pos; joint2_pos; joint3_pos],...
-            J_omega,...
-            com1_base...
-        ) / 1000;  % Convert mm to m
+        % Compute CoM Jacobians
+        J_com1 = compute_com_jacobian(position_bundle, axis_bundle, com1_base);
+        J_com2 = compute_com_jacobian(position_bundle, axis_bundle, com2_base);
+        J_com3 = compute_com_jacobian(position_bundle, axis_bundle, com3_base);
         
-        % Link 2 CoM (in base frame)
-        com2_base = joint2(1:3,1:3) * Link2.com' * 1000 + joint2(1:3,4);
-        J_com2 = compute_com_jacobian_geometric(...
-            [joint1_pos; joint2_pos; joint3_pos],...
-            J_omega,...
-            com2_base...
-        ) / 1000;  % Convert mm to m
+        % Gravity torque calculation
+        g_vec = [0; 0; -g];
+        gravity_torque = ...
+            J_com1' * (Link1.mass * g_vec) + ...
+            J_com2' * (Link2.mass * g_vec) + ...
+            J_com3' * (Link3.mass * g_vec);
         
-        % Link 3 CoM (in base frame)
-        com3_base = joint3(1:3,1:3) * Link3.com' * 1000 + joint3(1:3,4);
-        J_com3 = compute_com_jacobian_geometric(...
-            [joint1_pos; joint2_pos; joint3_pos],...
-            J_omega,...
-            com3_base...
-        ) / 1000;  % Convert mm to m
-        
-        % Calculate gravity torque for each link
-        gravity_force1 = [0; 0; -Link1.mass * g];
-        gravity_force2 = [0; 0; -Link2.mass * g];
-        gravity_force3 = [0; 0; -Link3.mass * g];
-        
-        gravity_torque = gravity_torque + ...
-            J_com1' * gravity_force1 + ...
-            J_com2' * gravity_force2 + ...
-            J_com3' * gravity_force3;
-        
-        % Add torque due to test tube if carried (at end-effector)
+        % Test tube handling
         if current_load > 0
-            tube_gravity_force = [0; 0; -current_load * g];
-            gravity_torque = gravity_torque + J_ee_m' * tube_gravity_force;
+            tube_com_base = ee(1:3, 1:3) * test_tube.com';
+            tube_com_base = tube_com_base(1:3)';
+            J_tube = compute_com_jacobian(position_bundle, axis_bundle, tube_com_base);
+            gravity_torque = gravity_torque + J_tube' * (current_load * g_vec);
         end
         
-        % Total torque = gravity compensation + external forces
+        % External force torque
+        ext_torque = Jk' * applied_force';
+        
+        % Total torque
         total_torque = gravity_torque + ext_torque;
         
         % Store torque values
@@ -631,18 +608,15 @@ function J = Jacobian(theta1_deg, theta2_deg, theta3_deg)
            0,                E,    F ];
 end
 
-function Jv = compute_com_jacobian_geometric(joint_positions, joint_axes, com_position)
-    % joint_positions: 3x3 matrix [j1_pos; j2_pos; j3_pos] (in mm)
+function Jv = compute_com_jacobian(joint_positions, joint_axes, com_position)
+    % joint_positions: 3x3 matrix [j1_pos; j2_pos; j3_pos] (in m)
     % joint_axes: 3x3 matrix [j1_axis; j2_axis; j3_axis]
-    % com_position: 3x1 vector (in mm)
+    % com_position: 3x1 vector (in m)
     
     Jv = zeros(3, 3);
     
     for j = 1:3
-        % For each joint, compute the vector from joint to CoM
-        r = com_position - joint_positions(j,:)';
-        
-        % Compute Jacobian column: ω × r for revolute joints
+        r = com_position - joint_positions(j,:);
         Jv(:, j) = cross(joint_axes(:,j), r);
     end
 end
