@@ -23,3 +23,22 @@ Phase 3 interests in path generation, trajectory generation and the use of Jabco
 - analytical_IK.m (supplement) has the first draft of how the robot arm behave in 3D space when it is driven by joint angles
 - jacobian_path.m (supplement) has the first draft of how the robot arm behave in 3D space when it is driven by spatial locations
 - dynamics_data.m (supplement) contains the mass properties data from Solidwork files, including mass, volume, surface area, center of mass, principle of moments, intertia tensor of center of mass, and inertia of joint
+- angle_control_smlt (supplement) has a case study where there are multiple test tubes are picked and placed one by one. The goal is to witness the behavior of the robot arm in the simulation
+- linear_control_smlt (supplement) has the same purpose as angle_control_smlt.m
+
+## General procedure
+Input: a target location on 3D map
+
+- Step 1: perform inverse kinematics and rank solutions based on 2 criteria (minimum position error and minimum displacement in Cartesian space)
+- Step 2: Check the payload (state of the robot arm picking up the test tube)
+- Step 3: compute in batch sets of target positions based on a constant linear velocity
+- Step 4: perform the animation. In each frame of the animation,
+
+  - Step 4.1: perform homogeneous transformation on each component to update position
+  - Step 4.2: update visualization of each component in space
+  - Step 4.3 (optional): create trace of end effector or sample points
+  - Step 4.4: compute the Jacobian matrix numerically (using finite differences) and analytically (using derivative method) and compare the similarity
+  - Step 4.5: compute the linear and angular velocity of the end effector from the trajectory
+  - Step 4.6: compute the force applied on the end effector during motion
+  - Step 4.7: infer the joint torque required based on payload mass and center of mass of each component
+- Step 5: plot and visualize all data collected during the simulation
