@@ -27,6 +27,8 @@ Phase 3 interests in path generation, trajectory generation and the use of Jabco
 - linear_control_smlt (supplement) has the same purpose as angle_control_smlt.m
 
 ## General procedure
+
+### Angle driven solution
 Input: a target location on 3D map
 
 - Step 1: perform inverse kinematics and rank solutions based on 2 criteria (minimum position error and minimum displacement in Cartesian space)
@@ -36,9 +38,23 @@ Input: a target location on 3D map
 
   - Step 4.1: perform homogeneous transformation on each component to update position
   - Step 4.2: update visualization of each component in space
-  - Step 4.3 (optional): create trace of end effector or sample points
+  - Step 4.3 (optional): create trace of end effector of sample points
   - Step 4.4: compute the Jacobian matrix numerically (using finite differences) and analytically (using derivative method) and compare the similarity
   - Step 4.5: compute the linear and angular velocity of the end effector from the trajectory
   - Step 4.6: compute the force applied on the end effector during motion
   - Step 4.7: infer the joint torque required based on payload mass and center of mass of each component
 - Step 5: plot and visualize all data collected during the simulation
+
+### Position driven solution
+Input: a target location on 3D map
+
+For every animation frame:
+- Step 1: compute the direction between the current position to the target position to infer the linear velocity
+- Step 2: compute the analytical Jacobian matrix for the linear velocities of the end effector
+- Step 3: update the visualization of each component in space
+- Step 4 (optional): create traces of end effector of sample points
+- compute the linear and angular velocity of the end effector from the trajectory
+- Step 5: compute the force applied on the end effector during motion
+- Step 6: infer the joint torque required based on payload mass and center of mass of each component
+
+After the animation ends, plot and visualize all data collected during the simulation
