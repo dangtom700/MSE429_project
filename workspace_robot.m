@@ -204,17 +204,17 @@ function plotWorkspace(points)
     
     % 2D Projections
     figure;
-    subplot(2,2,1);
+    subplot(1,3,1);
     scatter(points(:,1), points(:,2), 2, 'filled');
     title('X-Y Plane'); xlabel('X'); ylabel('Y');
     axis equal; grid on;
     
-    subplot(2,2,2);
+    subplot(1,3,2);
     scatter(points(:,1), points(:,3), 2, 'filled');
     title('X-Z Plane'); xlabel('X'); ylabel('Z');
     axis equal; grid on;
     
-    subplot(2,2,3);
+    subplot(1,3,3);
     scatter(points(:,2), points(:,3), 2, 'filled');
     title('Y-Z Plane'); xlabel('Y'); ylabel('Z');
     axis equal; grid on;

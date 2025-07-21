@@ -150,7 +150,7 @@ fig_handle = figure;
 
 % Plot part 2
 q(2) = patch('Faces', obj{2}.F, 'Vertices', obj{2}.V, ...
-             'FaceColor', [0.4, 0.6, 0.8], 'EdgeColor', 'none');  % Different color for visibility
+             'FaceColor', [0.8 0.4 0.6], 'EdgeColor', 'none');  % Different color for visibility
 
 % Store transposed vertices in cell array
 V_cell = cell(1, 5);

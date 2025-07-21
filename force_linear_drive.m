@@ -63,7 +63,7 @@ q(3) = patch('Faces', L3.F, 'Vertices', L3.V0', 'FaceColor', link_colors{3}, 'Ed
 
 %% -------------------- PATH GENERATION --------------------
 trace_pts = struct('L1', [], 'L2', [], 'L3', [], 'Lee', []);
-samples = create_samples([0,50,100], [150,150,100], [-150,100,100], 100, 8);
+samples = create_samples([0,50,100], [150,150,100], [-150,100,100], 100, 5);
 [num_samples, ~] = size(samples);
 disp("Generated sample points")
 disp(samples)
@@ -300,7 +300,7 @@ for i = 1:num_samples
         plot3(trace_pts.L2(:,1), trace_pts.L2(:,2), trace_pts.L2(:,3), 'g.', 'MarkerSize', 1);
         plot3(trace_pts.L3(:,1), trace_pts.L3(:,2), trace_pts.L3(:,3), 'b.', 'MarkerSize', 1);
         plot3(trace_pts.Lee(:,1), trace_pts.Lee(:,2), trace_pts.Lee(:,3), 'b.', 'MarkerSize', 1);
-        
+
         % Draw coordinate frames
         draw_frame(T1, 30);
         draw_frame(joint2, 30);

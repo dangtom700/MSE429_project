@@ -64,9 +64,9 @@ q(3) = patch('Faces', L3.F, 'Vertices', L3.V0', 'FaceColor', link_colors{3}, 'Ed
 %% -------------------- PATH GENERATION --------------------
 trace_pts = struct('L1', [], 'L2', [], 'L3', [], 'Lee', []);
 samples1 = create_samples([0,50,100], [150,150,100], [-150,100,100], 100, 5);
-samples2 = create_samples([0,50,100], [150,100,100], [-150,50,100], 100, 5); % Y - 50
-samples3 = create_samples([0,50,100], [100,150,100], [-200,100,100], 100, 5); % X - 50
-samples4 = create_samples([0,50,100], [100,100,100], [-200,50,100], 100, 5); % Y - 50, X - 50
+samples2 = create_samples([0,50,100], [150,170,100], [-150,120,100], 100, 5); % Y + 20
+samples3 = create_samples([0,50,100], [130,150,100], [-170,100,100], 100, 5); % X - 20
+samples4 = create_samples([0,50,100], [130,170,100], [-170,120,100], 100, 5); % Y + 20, X - 20
 
 [num_step_per_round, ~] = size(samples1);
 samples = [samples1(1:end-1, :); 
@@ -101,6 +101,7 @@ hold_force = force_vector; % N (upward during hold)
 % Initialize data recording arrays
 all_angles = [];
 all_velocities = [];
+all_angular_vel = [];
 all_J_error = [];
 all_location = [];
 all_linear_vel = [];
