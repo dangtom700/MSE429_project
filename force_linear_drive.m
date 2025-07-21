@@ -5,19 +5,19 @@ g = 9.81; % m/s^2
 
 % Link 1 (Base Link)
 Link1.mass = 204.72 * 1e-3; % kg
-Link1.com_1 = [1.77, -4.90, 59.45] * 1e-3; % m
+Link1.com_1 = [1.77; -4.90; 59.45] * 1e-3; % m
 
 % Link 2 (Middle Link)
 Link2.mass = 108.74 * 1e-3; % kg
-Link2.com_2 = [105.48, 11.41, -0.21] * 1e-3; % m
+Link2.com_2 = [105.48; 11.41; -0.21] * 1e-3; % m
 
 % Link 3 (End-Effector Link)
 Link3.mass = 36.51 * 1e-3; % kg
-Link3.com_3 = [62.65, -1.95, -0.01] * 1e-3; % m
+Link3.com_3 = [62.65; -1.95; -0.01] * 1e-3; % m
 
 % Test tube properties
 test_tube.mass = 0.000688; % kg
-test_tube.com = [0, 0, -0.04165]; % m (relative to end-effector)
+test_tube.com = [0; 0; -0.04165]; % m (relative to end-effector)
 
 % Store all links
 robot.links = {Link1, Link2, Link3};
@@ -143,7 +143,7 @@ for i = 1:num_samples
         applied_force = place_force;
         fprintf("---- PLACEMENT EVENT: Applying -Z-force ----\n");
     else
-        applied_force = [0, 0, 0];
+        applied_force = [0; 0; 0];
     end
 
     % Motion control loop
@@ -245,14 +245,11 @@ for i = 1:num_samples
 
         % ==================== DYNAMICS ANALYSIS ====================
         % Transform CoMs to base frame (in meters)
-        com1_base = joint1(1:3, 1:3) * Link1.com_1'; 
-        com1_base = com1_base(1:3)';
+        com1_base = joint1(1:3, 1:3) * Link1.com_1;
         
-        com2_base = joint2(1:3, 1:3) * Link2.com_2';
-        com2_base = com2_base(1:3)';
+        com2_base = joint2(1:3, 1:3) * Link2.com_2;
         
-        com3_base = joint3(1:3, 1:3) * Link3.com_3';
-        com3_base = com3_base(1:3)';
+        com3_base = joint3(1:3, 1:3) * Link3.com_3;
 
         position_bundle = [joint1_pos; joint2_pos; joint3_pos]./1000;
         axis_bundle = [joint1_axis, joint2_axis, joint3_axis];
@@ -271,14 +268,13 @@ for i = 1:num_samples
         
         % Test tube handling
         if current_load > 0
-            tube_com_base = ee(1:3, 1:3) * test_tube.com';
-            tube_com_base = tube_com_base(1:3)';
+            tube_com_base = ee(1:3, 1:3) * test_tube.com;
             J_tube = compute_com_jacobian(position_bundle, axis_bundle, tube_com_base);
             gravity_torque = gravity_torque + J_tube' * (current_load * g_vec);
         end
         
         % External force torque
-        ext_torque = Jk' * applied_force';
+        ext_torque = Jk' * applied_force;
         
         % Total torque
         total_torque = gravity_torque + ext_torque;
@@ -616,7 +612,7 @@ function Jv = compute_com_jacobian(joint_positions, joint_axes, com_position)
     Jv = zeros(3, 3);
     
     for j = 1:3
-        r = com_position - joint_positions(j,:);
+        r = com_position - joint_positions(j,:)';
         Jv(:, j) = cross(joint_axes(:,j), r);
     end
 end
