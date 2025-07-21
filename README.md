@@ -53,8 +53,8 @@ For every animation frame:
 - Step 2: compute the analytical Jacobian matrix for the linear velocities of the end effector
 - Step 3: update the visualization of each component in space
 - Step 4 (optional): create traces of end effector of sample points
-- compute the linear and angular velocity of the end effector from the trajectory
-- Step 5: compute the force applied on the end effector during motion
-- Step 6: infer the joint torque required based on payload mass and center of mass of each component
+- Step 5: compute the linear and angular velocity of the end effector from the trajectory
+- Step 6: compute the force applied on the end effector during motion
+- Step 7: infer the joint torque required based on payload mass and center of mass of each component
 
 After the animation ends, plot and visualize all data collected during the simulation
