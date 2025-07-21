@@ -85,14 +85,14 @@ r = 5;  % Target sphere radius
 velocity = 30;       % mm/s
 dt = 0.1;            % Time step [s]
 tolerance = 5;       % Position tolerance [mm]
-max_joint_vel = 10;  % Maximum joint velocity [deg/s]
+max_joint_vel = 20;  % Maximum joint velocity [deg/s]
 lambda = 0.1;        % Damping factor for singularity handling
 singularity_threshold = 1e5;  % Condition number threshold for singularity
 reachability = 347;  % Maximum radius [mm]
 
 % Force application parameters
 pickup_index = 4;          % When to pick up object
-place_index = num_samples - 2; % When to place object
+place_index = num_step_per_round - 2; % When to place object
 force_vector = test_tube.com * test_tube.mass;
 pickup_force = -force_vector * 2;  % N (upward during pickup)
 place_force = -force_vector * 0.7;% N (downward during placement)
@@ -144,7 +144,7 @@ for i = 1:num_samples
         current_load = test_tube.mass;
         applied_force = pickup_force;
         fprintf("---- PICKUP EVENT: Applying +Z-force ----\n");
-    elseif index > pickup_index && i < place_index
+    elseif index > pickup_index && index < place_index
         current_load = test_tube.mass;
         applied_force = hold_force;
         fprintf("---- HOLDING EVENT: Applying +Z-force ----\n");

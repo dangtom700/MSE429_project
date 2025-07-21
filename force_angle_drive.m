@@ -71,10 +71,9 @@ disp("--------------------------------------------------------------");
 r = 5;
 
 % Motion parameters
-steps = 20;
 dt = 0.1;            % Time step [s]
 safety_margin = 5;  % degrees from constraint boundary
-max_angular_vel = 20; % degrees/s
+max_angular_vel = 7; % degrees/s
 angle_constaints = [-300 -120 -250; 300 120 250];
 constraints = deg2rad(angle_constaints);
 position_tolerance = 1;  % 1 mm position tolerance
@@ -90,15 +89,16 @@ place_force = -force_vector * 0.7;% N (downward during placement)
 hold_force = force_vector; % N (upward during hold)
 
 % Initialize data recording arrays
-all_times = zeros(steps*num_samples, 3);          % Put time stamp
-all_angles = zeros(steps*num_samples, 3);         % Put current angles
-all_angular_vel = zeros(steps*num_samples, 3);    % Put angle_vel of EE
-all_J_error = zeros(steps*num_samples, 3);        % Put similarity score J
-all_location = zeros(steps*num_samples, 3);       % Put x, y, z of EE
-all_linear_vel = zeros(steps*num_samples, 3);     % Put linear_vel of EE
-all_torques = zeros(steps*num_samples, 3);
-all_gravity_torques = zeros(steps*num_samples, 3);
-all_ext_torques = zeros(steps*num_samples, 3);
+all_times = [];          % Put time stamp
+all_angles = [];         % Put current angles
+all_angular_vel = [];    % Put angle_vel of EE
+all_J_error = [];        % Put similarity score J
+all_location = [];       % Put x, y, z of EE
+all_linear_vel = [];     % Put linear_vel of EE
+all_torques = [];
+all_gravity_torques = [];
+all_ext_torques = [];
+all_steps = [];            % Put step number
 current_load = 0;          % Track if carrying object
 applied_force = [0, 0, 0]; % Current external force
 
@@ -197,10 +197,14 @@ for i = 1:num_samples
     end
     
     % ========== VELOCITY CONTROL ========== %
-    delta_angle = wrapTo180(best_solution - current_angle)./steps;
+    delta_angle = wrapTo180(best_solution - current_angle);
+    steps = max(ceil(delta_angle./max_angular_vel)) + 1;
+    all_steps = [all_steps, steps];  % Record number of steps for this sample
+    delta_angle = delta_angle ./ steps;  % Incremental angle change per step
     theta = zeros(3, steps);
 
     for s = 1:steps
+        progress = s./steps;
         target_angles = current_angle + delta_angle * s;
 
         for joint = 1:3
@@ -227,8 +231,8 @@ for i = 1:num_samples
         % Record current joint angles
         theta_rad = theta(:, k)';
         current_angles_deg = rad2deg(theta_rad);
-        all_angles(k + (i-1)*steps, :) = current_angles_deg;
-        all_times(k + (i-1)*steps, :) = current_time;
+        all_angles = [all_angles; current_angles_deg];  % Record current_angles_deg;
+        all_times = [all_times; current_time];  % Record current time
         previous_angle = current_angles_deg; % Update for next comparison
         current_time = current_time + dt;
         
@@ -250,7 +254,7 @@ for i = 1:num_samples
         joint3_pos = joint3(1:3,4)';
         jointee = joint3 * Tee;
         jointee_pos = jointee(1:3,4)';
-        all_location(k + (i-1)*steps, :) = jointee_pos;
+        all_location = [all_location; jointee_pos];
 
         V1 = apply_transform(L1.V0, joint1);
         V2 = apply_transform(L2.V0, joint2);
@@ -291,12 +295,12 @@ for i = 1:num_samples
         norm_J_cross = norm(J_cross, 'fro');
         denom = (norm_Jk + norm_J_cross) / 2;
         rel_norm_error = norm_diff / (denom + eps);
-        all_J_error(k + (i-1)*steps, :) = rel_norm_error;
+        all_J_error = [all_J_error; rel_norm_error];
 
         J_full = [J_cross; [z1, z2, z3]];
         wrench_vec = J_full * theta_rad';
-        all_linear_vel(k + (i-1)*steps, :) = wrench_vec(1:3);
-        all_angular_vel(k + (i-1)*steps, :) = wrench_vec(4:6);
+        all_linear_vel = [all_linear_vel; wrench_vec(1:3)'];
+        all_angular_vel = [all_angular_vel; wrench_vec(4:6)'];
 
         % ==================== DYNAMICS ANALYSIS ====================
         % Transform CoMs to base frame (in meters)
@@ -335,27 +339,15 @@ for i = 1:num_samples
         total_torque = gravity_torque + ext_torque;
         
         % Store torque values
-        all_torques(k + (i-1)*steps, :) = total_torque';
-        all_gravity_torques(k + (i-1)*steps, :) = gravity_torque';
-        all_ext_torques(k + (i-1)*steps, :) = ext_torque';
+        all_torques = [all_torques; total_torque'];
+        all_gravity_torques = [all_gravity_torques; gravity_torque'];
+        all_ext_torques = [all_ext_torques; ext_torque'];
     end
 
     disp("--------------------------------------------------------------");
 end
 
 %% -------------------- PLOT JOINT DATA --------------------
-% Trim unused elements in recording arrays
-valid_indices = all_times(:,1) ~= 0;
-all_times = all_times(valid_indices, :);
-all_angles = all_angles(valid_indices, :);
-all_angular_vel = all_angular_vel(valid_indices, :);
-all_J_error = all_J_error(valid_indices, :);
-all_location = all_location(valid_indices, :);
-all_linear_vel = all_linear_vel(valid_indices, :);
-all_torques = all_torques(valid_indices, :);
-all_gravity_torques = all_gravity_torques(valid_indices, :);
-all_ext_torques = all_ext_torques(valid_indices, :);
-
 % Calculate angular velocity using central difference
 n = size(all_angles, 1);
 velocity = zeros(n, 3);  % Preallocate velocity array
@@ -382,7 +374,7 @@ acceleration = zeros(n, 3);  % Preallocate acceleration array
 % Compute angular acceleration (deg/s^2)
 for j = 1:3  % For each joint
     for i = 2:n-1  % Avoid boundaries
-        acceleration(i, j) = (velocity(i+1, j) - velocity(i-1, j)) / (2*dt);
+        acceleration(i, j) = (all_angles(i+1, j) - 2*all_angles(i, j) + all_angles(i-1, j)) / (dt*dt);
     end
     
     % Handle boundaries with forward/backward differences
@@ -470,8 +462,8 @@ for j = 1:3
     xlabel('Time (s)');
     ylabel('Torque (N·m)');
     grid on;
-    xline(all_times((pickup_index-1)*steps), 'g--', 'Pickup', 'LineWidth', 1.5, 'HandleVisibility', 'off');
-    xline(all_times((place_index-1)*steps), 'm--', 'Placement', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+    xline(all_times(sum(all_steps(1: pickup_index-1))), 'g--', 'Pickup', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+    xline(all_times(sum(all_steps(1: place_index-1))), 'm--', 'Placement', 'LineWidth', 1.5, 'HandleVisibility', 'off');
     
     % Angular Velocity
     subplot(3,3,j+3);
@@ -480,8 +472,8 @@ for j = 1:3
     xlabel('Time (s)');
     ylabel('Torque (N·m)');
     grid on;
-    xline(all_times((pickup_index-1)*steps), 'g--', 'Pickup', 'LineWidth', 1.5, 'HandleVisibility', 'off');
-    xline(all_times((place_index-1)*steps), 'm--', 'Placement', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+    xline(all_times(sum(all_steps(1: pickup_index-1))), 'g--', 'Pickup', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+    xline(all_times(sum(all_steps(1: place_index-1))), 'm--', 'Placement', 'LineWidth', 1.5, 'HandleVisibility', 'off');
     
     % Angular Acceleration
     subplot(3,3,j+6);
@@ -490,8 +482,8 @@ for j = 1:3
     xlabel('Time (s)');
     ylabel('Torque (N·m)');
     grid on;
-    xline(all_times((pickup_index-1)*steps), 'g--', 'Pickup', 'LineWidth', 1.5, 'HandleVisibility', 'off');
-    xline(all_times((place_index-1)*steps), 'm--', 'Placement', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+    xline(all_times(sum(all_steps(1: pickup_index-1))), 'g--', 'Pickup', 'LineWidth', 1.5, 'HandleVisibility', 'off');
+    xline(all_times(sum(all_steps(1: place_index-1))), 'm--', 'Placement', 'LineWidth', 1.5, 'HandleVisibility', 'off');
 end
 
 sgtitle('Joint Torques During Motion');

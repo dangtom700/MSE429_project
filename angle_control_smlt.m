@@ -81,10 +81,9 @@ disp("--------------------------------------------------------------");
 r = 5;
 
 % Motion parameters
-steps = 20;
 dt = 0.1;            % Time step [s]
 safety_margin = 5;  % degrees from constraint boundary
-max_angular_vel = 5; % degrees/s
+max_angular_vel = 7; % degrees/s
 angle_constaints = [-300 -145 -250; 300 145 250];
 constraints = deg2rad(angle_constaints);
 position_tolerance = 1;  % 1 mm position tolerance
@@ -93,7 +92,7 @@ current_time = 0;         % Current simulation time
 
 % Force application parameters
 pickup_index = 4;          % When to pick up object
-place_index = num_samples - 2; % When to place object
+place_index = num_step_per_round - 2; % When to place object
 force_vector = test_tube.com * test_tube.mass;
 pickup_force = -force_vector * 2;  % N (upward during pickup)
 place_force = -force_vector * 0.7;% N (downward during placement)
@@ -112,6 +111,7 @@ all_ext_torques = [];
 current_load = 0;          % Track if carrying object
 applied_force = [0, 0, 0]; % Current external force
 
+%% -------------------- ANIMATION & DYNAMICS LOOP --------------------
 % Animation and dynamics loop
 for i = 1:num_samples
     sample = samples(i,:);
@@ -189,12 +189,13 @@ for i = 1:num_samples
     drawnow;
     
     % ======== UPDATE PAYLOAD STATE ======== %
+    % Apply pickup/placement forces
     index = mod(i, num_step_per_round);
     if index == pickup_index
         current_load = test_tube.mass;
         applied_force = pickup_force;
         fprintf("---- PICKUP EVENT: Applying +Z-force ----\n");
-    elseif index > pickup_index && i < place_index
+    elseif index > pickup_index && index < place_index
         current_load = test_tube.mass;
         applied_force = hold_force;
         fprintf("---- HOLDING EVENT: Applying +Z-force ----\n");
@@ -209,11 +210,12 @@ for i = 1:num_samples
     % ========== VELOCITY CONTROL ========== %
     delta_angle = wrapTo180(best_solution - current_angle);
     steps = max(ceil(delta_angle./max_angular_vel)) + 1;
+    delta_angle = delta_angle ./ steps;  % Incremental angle change per step
     theta = zeros(3, steps);
 
     for s = 1:steps
-        progress = s/steps;
-        target_angles = current_angle + delta_angle * progress;
+        progress = s./steps;
+        target_angles = current_angle + delta_angle * s;
 
         for joint = 1:3
             dist_lower = target_angles(joint) - angle_constaints(1, joint);
@@ -233,14 +235,14 @@ for i = 1:num_samples
         theta(:, s) = deg2rad(target_angles);
     end
     
-    current_angle = best_solution; % Update for the next round
+    current_angle = best_solution;
 
     for k = 1:steps
         % Record current joint angles
         theta_rad = theta(:, k)';
         current_angles_deg = rad2deg(theta_rad);
-        all_angles = [all_angles; current_angles_deg];
-        all_times = [all_times; current_time];
+        all_angles = [all_angles; current_angles_deg];  % Record current_angles_deg;
+        all_times = [all_times; current_time];  % Record current time
         previous_angle = current_angles_deg; % Update for next comparison
         current_time = current_time + dt;
         
@@ -278,7 +280,7 @@ for i = 1:num_samples
         trace_pts.Lee = [trace_pts.Lee; jointee_pos];
 
         plot3(trace_pts.Lee(:,1), trace_pts.Lee(:,2), trace_pts.Lee(:,3), 'b.', 'MarkerSize', 1);
-        
+
         drawnow;
 
         % Calculate force applied
@@ -372,7 +374,7 @@ acceleration = zeros(n, 3);  % Preallocate acceleration array
 % Compute angular acceleration (deg/s^2)
 for j = 1:3  % For each joint
     for i = 2:n-1  % Avoid boundaries
-        acceleration(i, j) = (all_angles(i+1, j) - 2*all_angles(i,j) + all_angles(i-1, j)) / (dt*dt);
+        acceleration(i, j) = (all_angles(i+1, j) - 2*all_angles(i, j) + all_angles(i-1, j)) / (dt*dt);
     end
     
     % Handle boundaries with forward/backward differences
