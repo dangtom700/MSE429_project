@@ -89,10 +89,10 @@ current_angle = [270,-66,156];  % degrees
 
 % Force application parameters
 pickup_index = 4;          % When to pick up object
-place_index = num_step_per_round - 2; % When to place object
-force_vector = test_tube.com * test_tube.mass;
-pickup_force = -force_vector * 2;  % N (upward during pickup)
-place_force = -force_vector * 0.7;% N (downward during placement)
+place_index = num_samples - 2; % When to place object
+force_vector = test_tube.com * test_tube.mass .* [0; 0; g];
+pickup_force = force_vector * 1.3;  % N (upward during pickup)
+place_force = force_vector * 0.7;% N (downward during placement)
 hold_force = force_vector; % N (upward during hold)
 
 % Initialize data recording arrays

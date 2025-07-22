@@ -16,7 +16,7 @@ Link3.mass = 36.51 * 1e-3; % kg
 Link3.com_3 = [62.65; -1.95; -0.01] * 1e-3; % m
 
 % Test tube properties
-test_tube.mass = 0.000688; % kg
+test_tube.mass = 0.035; % kg
 test_tube.com = [0; 0; -0.04165]; % m (relative to end-effector)
 
 % Store all links
@@ -80,9 +80,9 @@ current_angle = [270,-66,156];  % degrees
 % Force application parameters
 pickup_index = 4;          % When to pick up object
 place_index = num_samples - 2; % When to place object
-force_vector = test_tube.com * test_tube.mass;
-pickup_force = -force_vector * 2;  % N (upward during pickup)
-place_force = -force_vector * 0.7;% N (downward during placement)
+force_vector = test_tube.com * test_tube.mass .* [0; 0; -g];
+pickup_force = force_vector * 1.3;  % N (upward during pickup)
+place_force = force_vector * 0.7;% N (downward during placement)
 hold_force = force_vector; % N (upward during hold)
 
 % Initialize data recording arrays
@@ -684,7 +684,7 @@ function Jv = compute_com_jacobian(joint_positions, joint_axes, com_position)
 end
 
 function [d,v,a,t] = interpolate(theta_0,theta_f,tf,step)
-    % [d,v,a,t] = cubic_scheme(theta_0,theta_f,tf,step)
+    % [d,v,a,t] = cubic_scheme(theta_0,theta_f,tf,step);
     [d,v,a,t] = quintic_scheme(theta_0,theta_f,tf,step);
 end
 
