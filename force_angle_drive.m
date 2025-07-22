@@ -63,7 +63,7 @@ q(3) = patch('Faces', L3.F, 'Vertices', L3.V0', 'FaceColor', link_colors{3}, 'Ed
 
 %% -------------------- ANIMATION --------------------
 trace_pts = struct('L1', [], 'L2', [], 'L3', [], 'Lee', []);
-samples = create_samples([0,50,100], [150,150,100], [-150,100,100], 100, 5);
+samples = create_samples([50,0,100], [150,150,100], [150,-100,100], 100, 5);
 [num_samples, ~] = size(samples);
 disp("Generated sample points")
 disp(samples)
@@ -72,13 +72,10 @@ r = 5;
 
 % Motion parameters
 dt = 0.1;            % Time step [s]
-safety_margin = 5;  % degrees from constraint boundary
-max_angular_vel = 7; % degrees/s
-angle_constaints = [-300 -120 -250; 300 120 250];
+angle_constaints = [-300 -145 -250; 300 145 250];
 constraints = deg2rad(angle_constaints);
 position_tolerance = 1;  % 1 mm position tolerance
 current_angle = [270,-66,156];  % degrees
-current_time = 0;         % Current simulation time
 
 % Force application parameters
 pickup_index = 4;          % When to pick up object
@@ -98,6 +95,8 @@ all_linear_vel = [];     % Put linear_vel of EE
 all_torques = [];
 all_gravity_torques = [];
 all_ext_torques = [];
+velocity = [];
+acceleration = [];
 all_steps = [];            % Put step number
 current_load = 0;          % Track if carrying object
 applied_force = [0, 0, 0]; % Current external force
@@ -197,44 +196,33 @@ for i = 1:num_samples
     end
     
     % ========== VELOCITY CONTROL ========== %
-    delta_angle = wrapTo180(best_solution - current_angle);
-    steps = max(ceil(delta_angle./max_angular_vel)) + 1;
-    all_steps = [all_steps, steps];  % Record number of steps for this sample
-    delta_angle = delta_angle ./ steps;  % Incremental angle change per step
-    theta = zeros(3, steps);
-
-    for s = 1:steps
-        progress = s./steps;
-        target_angles = current_angle + delta_angle * s;
-
-        for joint = 1:3
-            dist_lower = target_angles(joint) - angle_constaints(1, joint);
-            dist_upper = angle_constaints(2, joint) - target_angles(joint);
-
-            if dist_lower < safety_margin
-                reduction = (dist_lower / safety_margin)^2;
-                target_angles(joint) = current_angle(joint) + ...
-                    delta_angle(joint) * progress * reduction;
-            elseif dist_upper < safety_margin
-                reduction = (dist_upper / safety_margin)^2;
-                target_angles(joint) = current_angle(joint) + ...
-                    delta_angle(joint) * progress * reduction;
-            end
-        end
-
-        theta(:, s) = deg2rad(target_angles);
+    theta = []; theta_dot = []; theta_ddot = []; steps = 1;
+    time_vec = [];
+    % Generate cubic trajectory
+    for joint = 1:3
+        [d_deg, v_deg, a_deg, t_seg] = cubic_scheme(...
+            current_angle(joint), best_solution(joint), 4, dt);
+        theta = [theta; d_deg];
+        theta_dot = [theta_dot; v_deg];
+        theta_ddot = [theta_ddot; a_deg];
+        time_vec = t_seg;
     end
+
+    all_angles = [all_angles; theta'];
+    velocity = [velocity; theta_dot'];
+    acceleration = [acceleration; theta_ddot'];
+    all_times = [all_times, t_seg + 4*i];
+    steps = length(t_seg);
+    all_steps = [all_steps, steps];
     
     current_angle = best_solution;
 
+    theta = deg2rad(theta);
+    theta_dot = deg2rad(theta_dot);
     for k = 1:steps
-        % Record current joint angles
         theta_rad = theta(:, k)';
         current_angles_deg = rad2deg(theta_rad);
-        all_angles = [all_angles; current_angles_deg];  % Record current_angles_deg;
-        all_times = [all_times; current_time];  % Record current time
-        previous_angle = current_angles_deg; % Update for next comparison
-        current_time = current_time + dt;
+        theta_dot_rad = theta_dot(:,k);
         
         % Update visualization
         T1 = [rotz(theta(1,k)), [0;0;0]; 0 0 0 1];
@@ -298,7 +286,7 @@ for i = 1:num_samples
         all_J_error = [all_J_error; rel_norm_error];
 
         J_full = [J_cross; [z1, z2, z3]];
-        wrench_vec = J_full * theta_rad';
+        wrench_vec = J_full * theta_dot_rad;
         all_linear_vel = [all_linear_vel; wrench_vec(1:3)'];
         all_angular_vel = [all_angular_vel; wrench_vec(4:6)'];
 
@@ -348,45 +336,6 @@ for i = 1:num_samples
 end
 
 %% -------------------- PLOT JOINT DATA --------------------
-% Calculate angular velocity using central difference
-n = size(all_angles, 1);
-velocity = zeros(n, 3);  % Preallocate velocity array
-
-% Compute angular velocity (deg/s)
-for j = 1:3  % For each joint
-    for i = 2:n-1  % Avoid boundaries
-        velocity(i, j) = (all_angles(i+1, j) - all_angles(i-1, j)) / (2*dt);
-    end
-    
-    % Handle boundaries with forward/backward differences
-    if n > 1
-        % First point: forward difference
-        velocity(1, j) = (all_angles(2, j) - all_angles(1, j)) / dt;
-        
-        % Last point: backward difference
-        velocity(n, j) = (all_angles(n, j) - all_angles(n-1, j)) / dt;
-    end
-end
-
-% Calculate angular acceleration using central differences
-acceleration = zeros(n, 3);  % Preallocate acceleration array
-
-% Compute angular acceleration (deg/s^2)
-for j = 1:3  % For each joint
-    for i = 2:n-1  % Avoid boundaries
-        acceleration(i, j) = (all_angles(i+1, j) - 2*all_angles(i, j) + all_angles(i-1, j)) / (dt*dt);
-    end
-    
-    % Handle boundaries with forward/backward differences
-    if n > 1
-        % First point: forward difference
-        acceleration(1, j) = (velocity(2, j) - velocity(1, j)) / dt;
-        
-        % Last point: backward difference
-        acceleration(n, j) = (velocity(n, j) - velocity(n-1, j)) / dt;
-    end
-end
-
 figure;
 plot(all_times, all_J_error, 'LineWidth', 2);
 xlabel('Time (s)');
@@ -731,5 +680,24 @@ function Jv = compute_com_jacobian(joint_positions, joint_axes, com_position)
     for j = 1:3
         r = com_position - joint_positions(j,:)';
         Jv(:, j) = cross(joint_axes(:,j), r);
+    end
+end
+
+function [d,v,a,t]=cubic_scheme(theta_0,theta_f,tf,step)
+    d=[];
+    v=[];
+    a=[];
+    n=length(theta_0);
+    for i=1:n
+        % Determning the value of the coefficients for each joint
+        a0=theta_0(i);
+        a1=0;
+        a2=3/tf^2*(theta_f(i)-theta_0(i));
+        a3=-2/tf^3*(theta_f(i)-theta_0(i));
+        % Identifying the values of displacement, velocity, and acceleration of the joints
+        t=0:step:tf;
+        d=[d;a0+a1.*t+a2.*t.^2+a3.*t.^3];
+        v=[v;a1+2.*a2.*t+3.*a3.*t.^2];
+        a=[a;2.*a2+6.*a3.*t];
     end
 end
