@@ -200,7 +200,7 @@ for i = 1:num_samples
     time_vec = [];
     % Generate cubic trajectory
     for joint = 1:3
-        [d_deg, v_deg, a_deg, t_seg] = cubic_scheme(...
+        [d_deg, v_deg, a_deg, t_seg] = interpolate(...
             current_angle(joint), best_solution(joint), 4, dt);
         theta = [theta; d_deg];
         theta_dot = [theta_dot; v_deg];
@@ -680,6 +680,33 @@ function Jv = compute_com_jacobian(joint_positions, joint_axes, com_position)
     for j = 1:3
         r = com_position - joint_positions(j,:)';
         Jv(:, j) = cross(joint_axes(:,j), r);
+    end
+end
+
+function [d,v,a,t] = interpolate(theta_0,theta_f,tf,step)
+    % [d,v,a,t] = cubic_scheme(theta_0,theta_f,tf,step)
+    [d,v,a,t] = quintic_scheme(theta_0,theta_f,tf,step);
+end
+
+function [d,v,a,t]=quintic_scheme(theta_0,theta_f,tf,step)
+    d =[];
+    v = [];
+    a = [];
+    n=length(theta_0);
+    for i=1:n
+        % Determning the value of the coefficients for each joint
+        a0=theta_0(i);
+        a1=0;
+        a2=0;
+        a3=(20*theta_f(i)-20*theta_0(i))/(2*tf^3);
+        a4=(30*theta_0(i)-30*theta_f(i))/(2*tf^4);
+        a5=(12*theta_f(i)-12*theta_0(i))/(2*tf^5);
+        
+        % Identifying the values of displacement, velocity, and acceleration of the joints
+        t=0:step:tf;
+        d=[d;a0+a1.*t+a2.*t.^2+a3.*t.^3+a4.*t.^4+a5.*t.^5];
+        v=[v;a1+2.*a2.*t+3.*a3.*t.^2+4.*a4.*t.^3+5.*a5.*t.^4];
+        a=[a;2.*a2+6.*a3.*t+12.*a4.*t.^2+20.*a5.*t.^3];
     end
 end
 
