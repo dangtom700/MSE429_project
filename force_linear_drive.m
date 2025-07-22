@@ -234,6 +234,7 @@ for i = 1:num_samples
         JP2 = cross(joint2_axis, (ee_pos - joint2_pos)');
         JP3 = cross(joint3_axis, (ee_pos - joint3_pos)');
         J_cross = [JP1, JP2, JP3];
+        Jk = Jacobian(current_angle(1), current_angle(2), current_angle(3));
         
         diff_J = J_cross - Jk;
         norm_diff = norm(diff_J, 'fro');
